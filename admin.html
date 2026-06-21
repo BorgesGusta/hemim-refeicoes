@@ -19,9 +19,22 @@
   td:first-child, th:first-child { text-align: left; }
   .hidden { display: none; }
   ul { font-size: 14px; }
+  .topo { max-width: 720px; margin: 24px auto 0; text-align: center; }
+  .topo img { width: 100%; max-width: 220px; height: auto; display: block; margin: 0 auto; }
+  .tabela-wrap { overflow-x: auto; }
+  @media (max-width: 480px) {
+    body { padding: 12px; }
+    .card { margin: 16px auto; padding: 16px; }
+    .topo { margin: 16px auto 0; }
+    table { font-size: 12px; }
+    th, td { padding: 6px; }
+  }
 </style>
 </head>
 <body>
+  <div class="topo">
+    <img src="assets/logo.png" alt="Hospital Regional Materno Infantil de Marabá">
+  </div>
   <div class="card">
     <h1>Relatório de Pedidos de Refeição — Hoje</h1>
     <div id="senhaArea">
@@ -36,7 +49,7 @@
   // IMPORTANTE: a URL deve ser só o endereço base, SEM "/rest/v1/" no final.
   const SUPABASE_URL = 'https://ymghyblozlpmcbirgvvf.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_h_cLHj3b_hzu8jOA0Lj-Gw_Dt7YTgWw';
-  const SENHA_ADMIN = '123mab@'; // trava simples, não é segurança forte
+  const SENHA_ADMIN = 'TROQUE_ESSA_SENHA'; // trava simples, não é segurança forte
   // ================================================================
 
   // "supabaseClient" (não "supabase") para não colidir com a variável
@@ -74,7 +87,7 @@
     });
 
     let html = '<p><b>Data:</b> ' + new Date().toLocaleDateString('pt-BR') + ' — <b>Total de pedidos:</b> ' + (pedidos || []).length + '</p>';
-    html += '<table><tr><th>Setor</th><th>Café</th><th>Almoço</th><th>Lanche</th><th>Total</th></tr>';
+    html += '<div class="tabela-wrap"><table><tr><th>Setor</th><th>Café</th><th>Almoço</th><th>Lanche</th><th>Total</th></tr>';
 
     let tc = 0, ta = 0, tl = 0;
     Object.keys(porSetor).sort((a, b) => a.localeCompare(b, 'pt-BR')).forEach(s => {
@@ -84,7 +97,7 @@
       html += '<tr><td>' + s + '</td><td>' + r.Cafe + '</td><td>' + r.Almoco + '</td><td>' + r.Lanche + '</td><td><b>' + total + '</b></td></tr>';
     });
     html += '<tr style="font-weight:bold;background:#eef2f8;"><td>TOTAL GERAL</td><td>' + tc + '</td><td>' + ta + '</td><td>' + tl + '</td><td>' + (tc + ta + tl) + '</td></tr>';
-    html += '</table>';
+    html += '</table></div>';
 
     const labels = { Cafe: 'Café', Almoco: 'Almoço', Lanche: 'Lanche' };
     ['Cafe', 'Almoco', 'Lanche'].forEach(r => {

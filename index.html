@@ -24,20 +24,30 @@
   .hidden { display: none; }
   .voltar { text-align: center; background: none; color: #1F4E78; font-weight: 500; margin-top: 14px; text-decoration: underline; cursor: pointer; }
   .relogio { font-size: 32px; text-align: center; margin: 10px 0; }
+  .topo { max-width: 420px; margin: 24px auto 0; text-align: center; }
+  .topo img { width: 100%; max-width: 260px; height: auto; display: block; margin: 0 auto; }
+  @media (max-width: 480px) {
+    body { padding: 12px; }
+    .card { margin: 16px auto; padding: 18px; }
+    .topo { margin: 16px auto 0; }
+  }
 </style>
 </head>
 <body>
 
+  <div class="topo">
+    <img src="assets/logo.png" alt="Hospital Regional Materno Infantil de Marabá">
+  </div>
+
   <div class="card hidden" id="foraHorarioCard">
     <h1>Pedido de Refeição</h1>
-    <div class="sub">Hospital Materno Infantil de Marabá</div>
     <div class="relogio">⏰</div>
     <div class="info" id="foraHorarioMsg" style="text-align:center;"></div>
   </div>
 
   <div class="card hidden" id="loginCard">
     <h1>Pedido de Refeição</h1>
-    <div class="sub" id="janelaInfo">Hospital Materno Infantil do Pará</div>
+    <div class="sub" id="janelaInfo"></div>
     <label for="nome">Seu nome completo</label>
     <input id="nome" placeholder="Digite seu nome completo">
     <button id="btnEntrar" onclick="entrar()">Continuar</button>
@@ -108,7 +118,7 @@
     }
 
     document.getElementById('janelaInfo').textContent =
-      'Hospital Materno Infantil do Pará — pedidos das ' + abertura + ' às ' + fechamento;
+      'Pedidos abertos das ' + abertura + ' às ' + fechamento;
     document.getElementById('loginCard').classList.remove('hidden');
   }
 
