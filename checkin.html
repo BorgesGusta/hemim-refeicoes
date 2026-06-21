@@ -31,6 +31,10 @@
   .linha-checkin .check { font-size: 18px; }
   .linha-checkin .nome-checkin { flex: 1; font-size: 15px; }
   .linha-checkin .setor-checkin { font-size: 12px; color: #888; }
+  .secao-titulo { font-size: 12px; font-weight: 700; margin: 16px 0 8px; text-transform: uppercase; letter-spacing: 0.3px; }
+  .secao-titulo:first-child { margin-top: 0; }
+  .secao-titulo.pendente { color: #c0392b; }
+  .secao-titulo.retirado { color: #1a7f37; }
   .operador-ativo { font-size: 12px; color: #1a7f37; margin-bottom: 10px; }
   .sair-link { font-size: 12px; color: #1F4E78; text-decoration: underline; cursor: pointer; }
   .rodape { text-align: center; font-size: 11px; color: #999; margin: 24px auto 12px; max-width: 480px; }
@@ -76,7 +80,7 @@
     </div>
   </div>
 
-  <div class="rodape">Sistema desenvolvido por Agëncia Grow. Ferramenta de apoio operacional, sem vínculo oficial com a administração do hospital.</div>
+  <div class="rodape">Sistema desenvolvido por Agência Grow. Ferramenta de apoio operacional, sem vínculo oficial com a administração do hospital.</div>
 
 <script>
   // ===== PREENCHA AQUI COM OS DADOS DO SEU PROJETO SUPABASE =====
@@ -164,30 +168,31 @@
   }
 
   function renderLista() {
-    const entregues = listaAtual.filter(p => p.entregue).length;
-    document.getElementById('contador').textContent = entregues + ' de ' + listaAtual.length + ' já entregue(s)';
-
     const termo = normalizar(document.getElementById('buscaNome').value);
     const filtrada = termo
       ? listaAtual.filter(p => normalizar(p.nome).indexOf(termo) !== -1)
       : listaAtual;
 
-    if (filtrada.length === 0) {
-      document.getElementById('listaCheckin').innerHTML = '<p class="ajuda">Nenhum pedido encontrado.</p>';
-      return;
+    const pendentes = filtrada.filter(p => !p.entregue).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    const retirados = filtrada.filter(p => p.entregue).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+
+    document.getElementById('contador').textContent = retirados.length + ' de ' + filtrada.length + ' já retirado(s)';
+
+    function linhaHtml(p) {
+      return '<div class="linha-checkin' + (p.entregue ? ' entregue' : '') + '" onclick="alternarEntrega(' + p.id + ')">' +
+        '<span class="check">' + (p.entregue ? '✅' : '⬜') + '</span>' +
+        '<span class="nome-checkin">' + p.nome + '</span>' +
+        '<span class="setor-checkin">' + p.setor + '</span>' +
+        '</div>';
     }
 
     let html = '';
-    filtrada
-      .slice()
-      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-      .forEach(p => {
-        html += '<div class="linha-checkin' + (p.entregue ? ' entregue' : '') + '" onclick="alternarEntrega(' + p.id + ')">' +
-          '<span class="check">' + (p.entregue ? '✅' : '⬜') + '</span>' +
-          '<span class="nome-checkin">' + p.nome + '</span>' +
-          '<span class="setor-checkin">' + p.setor + '</span>' +
-          '</div>';
-      });
+    html += '<div class="secao-titulo pendente">Falta retirar (' + pendentes.length + ')</div>';
+    html += pendentes.length ? pendentes.map(linhaHtml).join('') : '<p class="ajuda">Ninguém pendente nessa refeição 🎉</p>';
+
+    html += '<div class="secao-titulo retirado">Já retirado (' + retirados.length + ')</div>';
+    html += retirados.length ? retirados.map(linhaHtml).join('') : '<p class="ajuda">Ainda ninguém retirou.</p>';
+
     document.getElementById('listaCheckin').innerHTML = html;
   }
 
