@@ -13,7 +13,7 @@
   h1 { font-size: 20px; margin: 0 0 14px; }
   h2 { font-size: 16px; margin: 18px 0 10px; }
   h3 { margin-top: 22px; }
-  input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; margin-bottom: 10px; }
+  input, select { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; margin-bottom: 10px; }
   button { padding: 11px 18px; border: none; border-radius: 8px; background: #1F4E78; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
   table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 14px; }
   th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
@@ -32,6 +32,9 @@
     th, td { padding: 6px; }
   }
   .opcoes { display: flex; gap: 10px; flex-wrap: wrap; }
+  .campo-senha { display: flex; gap: 8px; align-items: center; }
+  .campo-senha input { margin-bottom: 0; flex: 1; }
+  .btn-olho { background: #e9eef5; color: #1F4E78; padding: 12px 16px; }
   .opcao-btn { flex: 1; min-width: 160px; padding: 22px 16px; font-size: 16px; }
   .opcao-secundaria { background: #1a7f37; }
   .voltar-link { display: inline-block; margin-bottom: 14px; color: #1F4E78; font-size: 13px; text-decoration: underline; cursor: pointer; }
@@ -81,7 +84,10 @@
     <div id="telaSenha" class="hidden">
       <span class="voltar-link" onclick="voltarInicio()">← Voltar</span>
       <p class="ajuda" id="rotuloSenha">Digite a senha de acesso:</p>
-      <input id="senha" type="password" placeholder="Senha de acesso">
+      <div class="campo-senha">
+        <input id="senha" type="password" placeholder="Senha de acesso" onkeydown="if(event.key==='Enter') confirmarSenha()">
+        <button type="button" class="btn-olho" onclick="alternarSenha()">👁️</button>
+      </div>
       <button onclick="confirmarSenha()">Entrar</button>
       <div id="msgSenha" class="msg-erro"></div>
     </div>
@@ -146,12 +152,18 @@
     return String(texto || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
   }
 
+  function alternarSenha() {
+    const campo = document.getElementById('senha');
+    campo.type = campo.type === 'password' ? 'text' : 'password';
+  }
+
   function escolherAcao(acao) {
     acaoEscolhida = acao;
     document.getElementById('telaInicial').classList.add('hidden');
     document.getElementById('rotuloSenha').textContent =
       acao === 'relatorio' ? 'Digite a senha para ver o relatório:' : 'Digite a senha para cadastrar funcionários:';
     document.getElementById('senha').value = '';
+    document.getElementById('senha').type = 'password';
     document.getElementById('msgSenha').textContent = '';
     document.getElementById('telaSenha').classList.remove('hidden');
   }
@@ -306,13 +318,14 @@
 
   // ---------------- Cadastro em lote ----------------
   let loteParaInserir = [];
+  let linhasArquivoAtual = [];
 
   function lerArquivo(event) {
     const file = event.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = async function (e) {
+    reader.onload = function (e) {
       try {
         const data = new Uint8Array(e.target.result);
         const workbook = XLSX.read(data, { type: 'array' });
@@ -323,7 +336,7 @@
           document.getElementById('previaLote').classList.remove('hidden');
           return;
         }
-        await processarLinhas(linhas);
+        mostrarMapeamento(linhas);
       } catch (err) {
         document.getElementById('previaLote').innerHTML = '<p class="msg-erro">Erro ao ler arquivo: ' + err.message + '</p>';
         document.getElementById('previaLote').classList.remove('hidden');
@@ -332,31 +345,61 @@
     reader.readAsArrayBuffer(file);
   }
 
-  function pegarCampo(linha, alvo) {
-    const chaves = Object.keys(linha);
-    const achada = chaves.find(k => normalizar(k) === alvo);
-    return achada ? String(linha[achada] || '').trim() : '';
+  // Mostra as colunas que existem na planilha e deixa o gestor confirmar
+  // qual coluna é Nome, qual é Cargo e qual é Setor antes de validar.
+  function mostrarMapeamento(linhas) {
+    linhasArquivoAtual = linhas;
+    const colunas = Object.keys(linhas[0] || {});
+
+    function montarOpcoes(palavrasChave) {
+      let opcoesHtml = '<option value="">— selecione a coluna —</option>';
+      colunas.forEach(c => {
+        const norm = normalizar(c);
+        const bate = palavrasChave.some(p => norm === p || norm.indexOf(p) !== -1);
+        opcoesHtml += '<option value="' + c.replace(/"/g, '&quot;') + '"' + (bate ? ' selected' : '') + '>' + c + '</option>';
+      });
+      return opcoesHtml;
+    }
+
+    let html = '<div class="resumo-lote">Total de linhas encontradas no arquivo: <b>' + linhas.length + '</b></div>';
+    html += '<p class="ajuda">Confirme qual coluna da sua planilha corresponde a cada campo:</p>';
+
+    html += '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Nome completo</label>';
+    html += '<select id="colNome">' + montarOpcoes(['nome', 'funcionario', 'colaborador']) + '</select>';
+
+    html += '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Cargo (opcional)</label>';
+    html += '<select id="colCargo">' + montarOpcoes(['cargo', 'funcao']) + '</select>';
+
+    html += '<label style="font-size:13px;font-weight:600;display:block;margin-bottom:4px;">Setor</label>';
+    html += '<select id="colSetor">' + montarOpcoes(['setor', 'departamento', 'area', 'lotacao']) + '</select>';
+
+    html += '<button onclick="confirmarMapeamento()">Confirmar colunas e validar</button>';
+
+    document.getElementById('previaLote').innerHTML = html;
+    document.getElementById('previaLote').classList.remove('hidden');
   }
 
-  async function processarLinhas(linhasOriginais) {
-    const candidatos = linhasOriginais.map(linha => ({
-      nome: pegarCampo(linha, 'nome'),
-      cargo: pegarCampo(linha, 'cargo'),
-      setor: pegarCampo(linha, 'setor')
-    }));
+  async function confirmarMapeamento() {
+    const colNome = document.getElementById('colNome').value;
+    const colCargo = document.getElementById('colCargo').value;
+    const colSetor = document.getElementById('colSetor').value;
 
-    const temColunas = candidatos.some(l => l.nome || l.setor);
-    if (!temColunas) {
-      document.getElementById('previaLote').innerHTML =
-        '<p class="msg-erro">Não encontrei as colunas "Nome" e "Setor" no arquivo. Confira se a primeira linha da planilha tem esses cabeçalhos.</p>';
-      document.getElementById('previaLote').classList.remove('hidden');
+    if (!colNome || !colSetor) {
+      alert('Selecione pelo menos a coluna de Nome e a coluna de Setor.');
       return;
     }
+
+    const candidatos = linhasArquivoAtual.map(linha => ({
+      nome: String(linha[colNome] || '').trim(),
+      cargo: colCargo ? String(linha[colCargo] || '').trim() : '',
+      setor: String(linha[colSetor] || '').trim()
+    }));
+
+    document.getElementById('previaLote').innerHTML = '<p class="ajuda">Validando ' + candidatos.length + ' linha(s)...</p>';
 
     const { data: classificadas, error } = await supabaseClient.rpc('pre_validar_lote', { lista: candidatos });
     if (error) {
       document.getElementById('previaLote').innerHTML = '<p class="msg-erro">Erro ao validar: ' + error.message + '</p>';
-      document.getElementById('previaLote').classList.remove('hidden');
       return;
     }
 
@@ -370,6 +413,7 @@
     const setores = new Set(loteParaInserir.map(l => l.setor));
 
     let html = '<div class="resumo-lote">';
+    html += 'Total de linhas no arquivo: <b>' + linhas.length + '</b><br>';
     html += '<b>' + loteParaInserir.length + '</b> novo(s) funcionário(s) encontrado(s), em <b>' + setores.size + '</b> setor(es).';
     if (duplicados > 0) html += '<br>' + duplicados + ' já cadastrado(s) — serão ignorados.';
     if (invalidos > 0) html += '<br>' + invalidos + ' linha(s) sem nome ou setor — serão ignoradas.';

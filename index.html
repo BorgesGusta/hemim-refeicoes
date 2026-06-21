@@ -70,7 +70,7 @@
     <h1>Pedido de Refeição</h1>
     <div class="sub" id="janelaInfo"></div>
     <label for="nome">Seu nome completo</label>
-    <input id="nome" placeholder="Digite seu nome completo">
+    <input id="nome" placeholder="Digite seu nome completo" onkeydown="if(event.key==='Enter') entrar()">
     <button id="btnEntrar" onclick="entrar()">Continuar</button>
     <div class="erro" id="erroLogin"></div>
   </div>
