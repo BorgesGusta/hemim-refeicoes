@@ -31,12 +31,33 @@
     .card { margin: 16px auto; padding: 18px; }
     .topo { margin: 16px auto 0; }
   }
+  .avisos { background: #fff7e6; border: 1px solid #f0c36d; border-radius: 10px; padding: 14px 16px; max-width: 420px; margin: 16px auto 0; font-size: 13px; color: #5c4200; }
+  .avisos strong { display: block; margin-bottom: 6px; font-size: 14px; }
+  .avisos ul { margin: 0; padding-left: 18px; }
+  .avisos li { margin-bottom: 4px; }
+  .comprovante { border: 1px dashed #1F4E78; border-radius: 10px; padding: 16px; margin-top: 16px; }
+  .comprovante-titulo { font-size: 16px; font-weight: 700; color: #1a7f37; margin-bottom: 10px; }
+  .comprovante-tabela { width: 100%; font-size: 14px; border-collapse: collapse; }
+  .comprovante-tabela td { padding: 5px 0; border-bottom: 1px solid #eee; vertical-align: top; }
+  .comprovante-tabela td:first-child { color: #666; width: 40%; }
+  .comprovante-aviso { font-size: 12px; color: #555; margin-top: 12px; font-style: italic; }
+  .rodape { text-align: center; font-size: 11px; color: #999; margin: 24px auto 12px; max-width: 420px; }
 </style>
 </head>
 <body>
 
   <div class="topo">
     <img src="assets/logo.png" alt="Hospital Regional Materno Infantil de Marabá">
+  </div>
+
+  <div class="avisos">
+    <strong>Atenção</strong>
+    <ul>
+      <li>Digite seu nome completo.</li>
+      <li>As refeições devem ser solicitadas diariamente.</li>
+      <li>A solicitação será encerrada às <span id="horarioAvisoFechamento">09:00</span> para viabilizar a entrega das refeições.</li>
+      <li>Esta solicitação NÃO deve ser realizada por pacientes — apenas por colaboradores.</li>
+    </ul>
   </div>
 
   <div class="card hidden" id="foraHorarioCard">
@@ -57,18 +78,23 @@
   <div class="card hidden" id="statusCard">
     <h1 id="saudacao"></h1>
     <div class="sub" id="setorInfo"></div>
-    <div class="info" id="jaPediuMsg"></div>
+    <div class="comprovante" id="jaPediuMsg"></div>
     <div class="voltar" onclick="sair()">Voltar</div>
   </div>
 
   <div class="card hidden" id="pedidoCard">
-    <h1 id="saudacao2"></h1>
-    <div class="sub" id="setorInfo2"></div>
-    <div id="refeicoes"></div>
-    <button id="btnConfirmar" onclick="confirmar()">Confirmar pedido</button>
-    <div class="erro" id="erroPedido"></div>
-    <div class="ok" id="okPedido"></div>
+    <div id="pedidoForm">
+      <h1 id="saudacao2"></h1>
+      <div class="sub" id="setorInfo2"></div>
+      <div id="refeicoes"></div>
+      <button id="btnConfirmar" onclick="confirmar()">Confirmar pedido</button>
+      <div class="erro" id="erroPedido"></div>
+    </div>
+    <div id="comprovante" class="comprovante hidden"></div>
   </div>
+
+  <div class="rodape">Sistema desenvolvido por Growup Agência — ferramenta de apoio operacional, sem vínculo oficial com a administração do hospital.</div>
+
 
 <script>
   // ===== PREENCHA AQUI COM OS DADOS DO SEU PROJETO SUPABASE =====
@@ -110,6 +136,8 @@
     const [fh, fm] = fechamento.split(':').map(Number);
     const dentro = minAgora >= (ah * 60 + am) && minAgora < (fh * 60 + fm);
 
+    document.getElementById('horarioAvisoFechamento').textContent = fechamento;
+
     if (!dentro) {
       document.getElementById('foraHorarioMsg').textContent =
         'Os pedidos só podem ser feitos das ' + abertura + ' às ' + fechamento + '. Volte dentro desse horário.';
@@ -148,20 +176,24 @@
     estado.setor = f.setor;
     estado.nomeNormalizado = normalizar(f.nome);
 
-    const { data: pedidoExistente } = await supabaseClient
-      .from('pedidos')
-      .select('refeicoes')
-      .eq('nome_normalizado', estado.nomeNormalizado)
-      .eq('data', hojeStr())
-      .maybeSingle();
+    const { data: refeicoesExistentes } = await supabaseClient.rpc('verificar_pedido_hoje', {
+      nome_normalizado_input: estado.nomeNormalizado
+    });
 
     document.getElementById('loginCard').classList.add('hidden');
 
-    if (pedidoExistente) {
+    if (refeicoesExistentes) {
       document.getElementById('saudacao').textContent = 'Olá, ' + f.nome.split(' ')[0] + '!';
       document.getElementById('setorInfo').textContent = f.setor;
-      document.getElementById('jaPediuMsg').textContent =
-        'Você já registrou seu pedido de hoje: ' + pedidoExistente.refeicoes.join(', ') + '. Só é permitido um pedido por dia.';
+      document.getElementById('jaPediuMsg').innerHTML =
+        '<div class="comprovante-titulo">✅ Pedido já registrado hoje</div>' +
+        '<table class="comprovante-tabela">' +
+        '<tr><td>Nome</td><td>' + f.nome + '</td></tr>' +
+        '<tr><td>Setor</td><td>' + f.setor + '</td></tr>' +
+        '<tr><td>Data</td><td>' + new Date().toLocaleDateString('pt-BR') + '</td></tr>' +
+        '<tr><td>Refeições</td><td>' + refeicoesExistentes.join(', ') + '</td></tr>' +
+        '</table>' +
+        '<div class="comprovante-aviso">Só é permitido um pedido por dia. Use este print como comprovante, se precisar.</div>';
       document.getElementById('statusCard').classList.remove('hidden');
     } else {
       document.getElementById('saudacao2').textContent = 'Olá, ' + f.nome.split(' ')[0] + '!';
@@ -186,7 +218,6 @@
     const checks = document.querySelectorAll('#refeicoes input[type=checkbox]:checked');
     const ids = Array.from(checks).map(c => c.value);
     document.getElementById('erroPedido').textContent = '';
-    document.getElementById('okPedido').textContent = '';
 
     if (ids.length === 0) {
       document.getElementById('erroPedido').textContent = 'Selecione ao menos uma refeição.';
@@ -215,9 +246,23 @@
       return;
     }
 
-    document.getElementById('okPedido').textContent = 'Pedido registrado com sucesso!';
-    document.getElementById('btnConfirmar').classList.add('hidden');
-    document.querySelectorAll('#refeicoes input[type=checkbox]').forEach(c => { c.disabled = true; });
+    const agora = new Date();
+    const horaStr = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const dataStr = agora.toLocaleDateString('pt-BR');
+    const refLabels = REFEICOES.filter(r => ids.indexOf(r.id) !== -1).map(r => r.label);
+
+    document.getElementById('pedidoForm').classList.add('hidden');
+    document.getElementById('comprovante').innerHTML =
+      '<div class="comprovante-titulo">✅ Pedido confirmado</div>' +
+      '<table class="comprovante-tabela">' +
+      '<tr><td>Nome</td><td>' + estado.nome + '</td></tr>' +
+      '<tr><td>Setor</td><td>' + estado.setor + '</td></tr>' +
+      '<tr><td>Data</td><td>' + dataStr + '</td></tr>' +
+      '<tr><td>Horário do pedido</td><td>' + horaStr + '</td></tr>' +
+      '<tr><td>Refeições</td><td>' + refLabels.join(', ') + '</td></tr>' +
+      '</table>' +
+      '<div class="comprovante-aviso">Tire um print desta tela como comprovante do seu pedido de hoje.</div>';
+    document.getElementById('comprovante').classList.remove('hidden');
   }
 
   function sair() {

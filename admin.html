@@ -3,13 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Relatório de Pedidos - HEMIM</title>
+<title>Painel do Gestor - HEMIM</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <style>
   * { box-sizing: border-box; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
   body { margin: 0; padding: 16px; background: #f4f6f8; color: #1a1a1a; }
   .card { background: #fff; border-radius: 12px; padding: 20px; max-width: 720px; margin: 24px auto; box-shadow: 0 1px 6px rgba(0,0,0,0.10); }
   h1 { font-size: 20px; margin: 0 0 14px; }
+  h2 { font-size: 16px; margin: 18px 0 10px; }
   h3 { margin-top: 22px; }
   input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; margin-bottom: 10px; }
   button { padding: 11px 18px; border: none; border-radius: 8px; background: #1F4E78; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
@@ -29,6 +31,34 @@
     table { font-size: 12px; }
     th, td { padding: 6px; }
   }
+  .opcoes { display: flex; gap: 10px; flex-wrap: wrap; }
+  .opcao-btn { flex: 1; min-width: 160px; padding: 22px 16px; font-size: 16px; }
+  .opcao-secundaria { background: #1a7f37; }
+  .voltar-link { display: inline-block; margin-bottom: 14px; color: #1F4E78; font-size: 13px; text-decoration: underline; cursor: pointer; }
+  .filtro-data { margin-bottom: 16px; }
+  .filtro-data .rotulo { font-size: 12px; font-weight: 600; color: #555; margin-bottom: 6px; }
+  .atalhos { display: flex; gap: 8px; margin-bottom: 10px; }
+  .atalhos button { flex: 1; background: #e9eef5; color: #1F4E78; }
+  .atalhos button.ativo { background: #1F4E78; color: #fff; }
+  .data-especifica { display: flex; gap: 8px; align-items: center; }
+  .data-especifica input { margin-bottom: 0; flex: 1; }
+  .data-especifica button { white-space: nowrap; }
+  .btn-imprimir { width: 100%; margin-top: 6px; background: #fff; color: #1F4E78; border: 1px solid #1F4E78; }
+  .rodape { text-align: center; font-size: 11px; color: #999; margin: 24px auto 12px; max-width: 720px; }
+  .ajuda { font-size: 13px; color: #666; margin: -4px 0 12px; }
+  .msg-ok { color: #1a7f37; font-size: 13px; margin-top: -4px; margin-bottom: 10px; font-weight: 600; }
+  .msg-erro { color: #c0392b; font-size: 13px; margin-top: -4px; margin-bottom: 10px; font-weight: 600; }
+  .resumo-lote { background: #eef2f8; border-radius: 8px; padding: 12px; margin: 12px 0; font-size: 14px; line-height: 1.5; }
+  .resumo-lote.ok { background: #e8f5ec; color: #1a7f37; }
+  .tag-novo { color: #1a7f37; font-weight: 600; }
+  .tag-duplicado { color: #b8860b; font-weight: 600; }
+  .tag-invalido { color: #c0392b; font-weight: 600; }
+  hr { border: none; border-top: 1px solid #e5e5e5; margin: 24px 0; }
+  @media print {
+    .voltar-link, .filtro-data, #telaInicial, #telaSenha, .no-print { display: none; }
+    body { background: #fff; }
+    .card { box-shadow: none; max-width: 100%; }
+  }
 </style>
 </head>
 <body>
@@ -36,42 +66,157 @@
     <img src="assets/logo.png" alt="Hospital Regional Materno Infantil de Marabá">
   </div>
   <div class="card">
-    <h1>Relatório de Pedidos de Refeição — Hoje</h1>
-    <div id="senhaArea">
-      <input id="senha" type="password" placeholder="Senha de acesso">
-      <button onclick="entrarAdmin()">Entrar</button>
+    <h1>Painel do Gestor</h1>
+
+    <!-- Etapa 1: escolher a ação -->
+    <div id="telaInicial">
+      <p class="ajuda">O que você deseja fazer?</p>
+      <div class="opcoes">
+        <button class="opcao-btn" onclick="escolherAcao('relatorio')">Ver relatório de pedidos</button>
+        <button class="opcao-btn opcao-secundaria" onclick="escolherAcao('cadastro')">Cadastrar funcionários</button>
+      </div>
     </div>
-    <div id="relatorioArea" class="hidden"></div>
+
+    <!-- Etapa 2: senha para a ação escolhida -->
+    <div id="telaSenha" class="hidden">
+      <span class="voltar-link" onclick="voltarInicio()">← Voltar</span>
+      <p class="ajuda" id="rotuloSenha">Digite a senha de acesso:</p>
+      <input id="senha" type="password" placeholder="Senha de acesso">
+      <button onclick="confirmarSenha()">Entrar</button>
+      <div id="msgSenha" class="msg-erro"></div>
+    </div>
+
+    <!-- Etapa 3a: relatório -->
+    <div id="painelRelatorio" class="hidden">
+      <span class="voltar-link" onclick="voltarInicio()">← Voltar</span>
+      <div class="filtro-data">
+        <div class="rotulo">Ver pedidos de:</div>
+        <div class="atalhos">
+          <button id="btnHoje" onclick="irPara(0)">Hoje</button>
+          <button id="btnOntem" onclick="irPara(1)">Ontem</button>
+        </div>
+        <div class="rotulo">Ou escolha outra data:</div>
+        <div class="data-especifica">
+          <input type="date" id="dataFiltro" onchange="limparAtalhoAtivo(); carregarRelatorio()">
+          <button onclick="carregarRelatorio()">Buscar</button>
+        </div>
+        <button class="btn-imprimir" onclick="window.print()">Imprimir / Salvar PDF</button>
+      </div>
+      <div id="relatorioArea"></div>
+    </div>
+
+    <!-- Etapa 3b: cadastro -->
+    <div id="painelCadastro" class="hidden">
+      <span class="voltar-link" onclick="voltarInicio()">← Voltar</span>
+      <h2>Cadastro manual</h2>
+      <p class="ajuda">Adicione um funcionário por vez.</p>
+      <input id="novoNome" placeholder="Nome completo">
+      <input id="novoCargo" placeholder="Cargo">
+      <input id="novoSetor" placeholder="Setor">
+      <button onclick="cadastrarManual()">Adicionar funcionário</button>
+      <div id="msgCadastroManual"></div>
+
+      <hr>
+
+      <h2>Cadastro em lote (CSV ou Excel)</h2>
+      <p class="ajuda">O arquivo precisa ter as colunas <b>Nome</b>, <b>Cargo</b> e <b>Setor</b>. Nomes que já existem na lista são identificados e ignorados automaticamente.</p>
+      <input type="file" id="arquivoLote" accept=".csv,.xlsx,.xls" onchange="lerArquivo(event)">
+      <div id="previaLote" class="hidden"></div>
+    </div>
   </div>
+
+  <div class="rodape">Sistema desenvolvido por Growup Agência — ferramenta de apoio operacional, sem vínculo oficial com a administração do hospital.</div>
 
 <script>
   // ===== PREENCHA AQUI COM OS DADOS DO SEU PROJETO SUPABASE =====
   // IMPORTANTE: a URL deve ser só o endereço base, SEM "/rest/v1/" no final.
   const SUPABASE_URL = 'https://ymghyblozlpmcbirgvvf.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_h_cLHj3b_hzu8jOA0Lj-Gw_Dt7YTgWw';
-  const SENHA_ADMIN = '123kaique'; // trava simples, não é segurança forte
+  // A senha do gestor NÃO fica mais aqui no arquivo - ela vive só no
+  // banco de dados (tabela admin_config) e é confirmada lá dentro,
+  // nunca no navegador.
   // ================================================================
 
-  // "supabaseClient" (não "supabase") para não colidir com a variável
-  // global que a própria biblioteca já cria.
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  function entrarAdmin() {
-    if (document.getElementById('senha').value !== SENHA_ADMIN) {
-      alert('Senha incorreta.');
-      return;
+  let acaoEscolhida = null;
+  let senhaValidada = null;
+
+  function normalizar(texto) {
+    return String(texto || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+  }
+
+  function escolherAcao(acao) {
+    acaoEscolhida = acao;
+    document.getElementById('telaInicial').classList.add('hidden');
+    document.getElementById('rotuloSenha').textContent =
+      acao === 'relatorio' ? 'Digite a senha para ver o relatório:' : 'Digite a senha para cadastrar funcionários:';
+    document.getElementById('senha').value = '';
+    document.getElementById('msgSenha').textContent = '';
+    document.getElementById('telaSenha').classList.remove('hidden');
+  }
+
+  function voltarInicio() {
+    acaoEscolhida = null;
+    senhaValidada = null;
+    document.getElementById('painelRelatorio').classList.add('hidden');
+    document.getElementById('painelCadastro').classList.add('hidden');
+    document.getElementById('telaSenha').classList.add('hidden');
+    document.getElementById('telaInicial').classList.remove('hidden');
+  }
+
+  async function confirmarSenha() {
+    const senha = document.getElementById('senha').value;
+    document.getElementById('msgSenha').textContent = '';
+
+    if (acaoEscolhida === 'relatorio') {
+      const hoje = new Date().toISOString().slice(0, 10);
+      const { error } = await supabaseClient.rpc('obter_pedidos_dia', { senha_input: senha, data_input: hoje });
+      if (error) {
+        document.getElementById('msgSenha').textContent = 'Senha incorreta.';
+        return;
+      }
+      senhaValidada = senha;
+      document.getElementById('telaSenha').classList.add('hidden');
+      document.getElementById('painelRelatorio').classList.remove('hidden');
+      irPara(0);
+    } else {
+      const { error } = await supabaseClient.rpc('validar_senha_admin', { senha_input: senha });
+      if (error) {
+        document.getElementById('msgSenha').textContent = 'Senha incorreta.';
+        return;
+      }
+      senhaValidada = senha;
+      document.getElementById('telaSenha').classList.add('hidden');
+      document.getElementById('painelCadastro').classList.remove('hidden');
     }
-    document.getElementById('senhaArea').classList.add('hidden');
-    document.getElementById('relatorioArea').classList.remove('hidden');
+  }
+
+  // ---------------- Relatório ----------------
+  function limparAtalhoAtivo() {
+    document.getElementById('btnHoje').classList.remove('ativo');
+    document.getElementById('btnOntem').classList.remove('ativo');
+  }
+
+  function irPara(diasAtras) {
+    const d = new Date();
+    d.setDate(d.getDate() - diasAtras);
+    document.getElementById('dataFiltro').value = d.toISOString().slice(0, 10);
+    limparAtalhoAtivo();
+    if (diasAtras === 0) document.getElementById('btnHoje').classList.add('ativo');
+    if (diasAtras === 1) document.getElementById('btnOntem').classList.add('ativo');
     carregarRelatorio();
   }
 
   async function carregarRelatorio() {
-    const hoje = new Date().toISOString().slice(0, 10);
-    const { data: pedidos, error } = await supabaseClient.from('pedidos').select('*').eq('data', hoje);
+    const dataEscolhida = document.getElementById('dataFiltro').value || new Date().toISOString().slice(0, 10);
+    const { data: pedidos, error } = await supabaseClient.rpc('obter_pedidos_dia', {
+      senha_input: senhaValidada,
+      data_input: dataEscolhida
+    });
 
     if (error) {
-      document.getElementById('relatorioArea').innerHTML = '<p style="color:#c0392b;">Erro: ' + error.message + '</p>';
+      document.getElementById('relatorioArea').innerHTML = '<p class="msg-erro">Erro: ' + error.message + '</p>';
       return;
     }
 
@@ -86,7 +231,8 @@
       });
     });
 
-    let html = '<p><b>Data:</b> ' + new Date().toLocaleDateString('pt-BR') + ' — <b>Total de pedidos:</b> ' + (pedidos || []).length + '</p>';
+    const dataFormatada = new Date(dataEscolhida + 'T00:00:00').toLocaleDateString('pt-BR');
+    let html = '<p><b>Data:</b> ' + dataFormatada + ' — <b>Total de pedidos:</b> ' + (pedidos || []).length + '</p>';
     html += '<div class="tabela-wrap"><table><tr><th>Setor</th><th>Café</th><th>Almoço</th><th>Lanche</th><th>Total</th></tr>';
 
     let tc = 0, ta = 0, tl = 0;
@@ -113,8 +259,157 @@
       }
     });
 
-    html += '<button onclick="carregarRelatorio()">Atualizar agora</button>';
+    html += '<button class="no-print" onclick="carregarRelatorio()">Atualizar agora</button>';
     document.getElementById('relatorioArea').innerHTML = html;
+  }
+
+  // ---------------- Cadastro manual ----------------
+  async function cadastrarManual() {
+    const nome = document.getElementById('novoNome').value.trim();
+    const cargo = document.getElementById('novoCargo').value.trim();
+    const setor = document.getElementById('novoSetor').value.trim();
+    const msg = document.getElementById('msgCadastroManual');
+    msg.textContent = '';
+    msg.className = '';
+
+    if (!nome || !setor) {
+      msg.textContent = 'Preencha pelo menos nome e setor.';
+      msg.className = 'msg-erro';
+      return;
+    }
+
+    const { data, error } = await supabaseClient.rpc('cadastrar_funcionario', {
+      senha_input: senhaValidada,
+      nome_input: nome,
+      cargo_input: cargo,
+      setor_input: setor
+    });
+
+    if (error) {
+      msg.textContent = 'Erro ao cadastrar: ' + error.message;
+      msg.className = 'msg-erro';
+      return;
+    }
+
+    if (data && data.ok === false) {
+      msg.textContent = 'Já existe um funcionário com esse nome (setor: ' + data.setor_existente + '). Cadastro não realizado.';
+      msg.className = 'msg-erro';
+      return;
+    }
+
+    msg.textContent = nome + ' cadastrado com sucesso no setor ' + setor + '.';
+    msg.className = 'msg-ok';
+    document.getElementById('novoNome').value = '';
+    document.getElementById('novoCargo').value = '';
+    document.getElementById('novoSetor').value = '';
+  }
+
+  // ---------------- Cadastro em lote ----------------
+  let loteParaInserir = [];
+
+  function lerArquivo(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async function (e) {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const linhas = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+        if (!linhas.length) {
+          document.getElementById('previaLote').innerHTML = '<p class="msg-erro">O arquivo está vazio ou não foi possível ler as linhas.</p>';
+          document.getElementById('previaLote').classList.remove('hidden');
+          return;
+        }
+        await processarLinhas(linhas);
+      } catch (err) {
+        document.getElementById('previaLote').innerHTML = '<p class="msg-erro">Erro ao ler arquivo: ' + err.message + '</p>';
+        document.getElementById('previaLote').classList.remove('hidden');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function pegarCampo(linha, alvo) {
+    const chaves = Object.keys(linha);
+    const achada = chaves.find(k => normalizar(k) === alvo);
+    return achada ? String(linha[achada] || '').trim() : '';
+  }
+
+  async function processarLinhas(linhasOriginais) {
+    const candidatos = linhasOriginais.map(linha => ({
+      nome: pegarCampo(linha, 'nome'),
+      cargo: pegarCampo(linha, 'cargo'),
+      setor: pegarCampo(linha, 'setor')
+    }));
+
+    const temColunas = candidatos.some(l => l.nome || l.setor);
+    if (!temColunas) {
+      document.getElementById('previaLote').innerHTML =
+        '<p class="msg-erro">Não encontrei as colunas "Nome" e "Setor" no arquivo. Confira se a primeira linha da planilha tem esses cabeçalhos.</p>';
+      document.getElementById('previaLote').classList.remove('hidden');
+      return;
+    }
+
+    const { data: classificadas, error } = await supabaseClient.rpc('pre_validar_lote', { lista: candidatos });
+    if (error) {
+      document.getElementById('previaLote').innerHTML = '<p class="msg-erro">Erro ao validar: ' + error.message + '</p>';
+      document.getElementById('previaLote').classList.remove('hidden');
+      return;
+    }
+
+    renderPreviaLote(classificadas);
+  }
+
+  function renderPreviaLote(linhas) {
+    loteParaInserir = linhas.filter(l => l.status === 'novo');
+    const duplicados = linhas.filter(l => l.status === 'duplicado').length;
+    const invalidos = linhas.filter(l => l.status === 'invalido').length;
+    const setores = new Set(loteParaInserir.map(l => l.setor));
+
+    let html = '<div class="resumo-lote">';
+    html += '<b>' + loteParaInserir.length + '</b> novo(s) funcionário(s) encontrado(s), em <b>' + setores.size + '</b> setor(es).';
+    if (duplicados > 0) html += '<br>' + duplicados + ' já cadastrado(s) — serão ignorados.';
+    if (invalidos > 0) html += '<br>' + invalidos + ' linha(s) sem nome ou setor — serão ignoradas.';
+    html += '</div>';
+
+    html += '<div class="tabela-wrap"><table><tr><th>Nome</th><th>Cargo</th><th>Setor</th><th>Situação</th></tr>';
+    linhas.forEach(l => {
+      let tag = '<span class="tag-novo">novo</span>';
+      if (l.status === 'invalido') tag = '<span class="tag-invalido">sem nome/setor</span>';
+      else if (l.status === 'duplicado') tag = '<span class="tag-duplicado">já cadastrado</span>';
+      html += '<tr><td>' + (l.nome || '—') + '</td><td>' + (l.cargo || '—') + '</td><td>' + (l.setor || '—') + '</td><td>' + tag + '</td></tr>';
+    });
+    html += '</table></div>';
+
+    if (loteParaInserir.length > 0) {
+      html += '<button onclick="confirmarLote()">Confirmar cadastro de ' + loteParaInserir.length + ' funcionário(s)</button>';
+    }
+
+    document.getElementById('previaLote').innerHTML = html;
+    document.getElementById('previaLote').classList.remove('hidden');
+  }
+
+  async function confirmarLote() {
+    if (loteParaInserir.length === 0) return;
+    const linhas = loteParaInserir.map(l => ({ nome: l.nome, cargo: l.cargo, setor: l.setor }));
+
+    const { data, error } = await supabaseClient.rpc('cadastrar_funcionarios_lote', {
+      senha_input: senhaValidada,
+      lista: linhas
+    });
+
+    if (error) {
+      document.getElementById('previaLote').innerHTML += '<p class="msg-erro">Erro ao cadastrar: ' + error.message + '</p>';
+      return;
+    }
+
+    document.getElementById('previaLote').innerHTML =
+      '<div class="resumo-lote ok"><b>' + data.inseridos + ' funcionário(s) cadastrado(s) com sucesso</b>, em ' + data.setores + ' setor(es).</div>';
+    document.getElementById('arquivoLote').value = '';
+    loteParaInserir = [];
   }
 </script>
 </body>
