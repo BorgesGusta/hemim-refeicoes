@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Relatório de Pedidos - HEMIM</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  body { margin: 0; padding: 16px; background: #f4f6f8; color: #1a1a1a; }
+  .card { background: #fff; border-radius: 12px; padding: 20px; max-width: 720px; margin: 24px auto; box-shadow: 0 1px 6px rgba(0,0,0,0.10); }
+  h1 { font-size: 20px; margin: 0 0 14px; }
+  h3 { margin-top: 22px; }
+  input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; margin-bottom: 10px; }
+  button { padding: 11px 18px; border: none; border-radius: 8px; background: #1F4E78; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer; }
+  table { border-collapse: collapse; width: 100%; margin-top: 8px; font-size: 14px; }
+  th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+  th { background: #1F4E78; color: #fff; }
+  td:first-child, th:first-child { text-align: left; }
+  .hidden { display: none; }
+  ul { font-size: 14px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Relatório de Pedidos de Refeição — Hoje</h1>
+    <div id="senhaArea">
+      <input id="senha" type="password" placeholder="Senha de acesso">
+      <button onclick="entrarAdmin()">Entrar</button>
+    </div>
+    <div id="relatorioArea" class="hidden"></div>
+  </div>
+
+<script>
+  // ===== PREENCHA AQUI COM OS DADOS DO SEU PROJETO SUPABASE =====
+  const SUPABASE_URL = 'https://ymghyblozlpmcbirgvvf.supabase.co/rest/v1/';
+  const SUPABASE_ANON_KEY = 'sb_publishable_h_cLHj3b_hzu8jOA0Lj-Gw_Dt7YTgWw';
+  const SENHA_ADMIN = 'TROQUE_ESSA_SENHA'; // trava simples, não é segurança forte - é só pra não ficar 100% aberto
+  // ================================================================
+
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  function entrarAdmin() {
+    if (document.getElementById('senha').value !== SENHA_ADMIN) {
+      alert('Senha incorreta.');
+      return;
+    }
+    document.getElementById('senhaArea').classList.add('hidden');
+    document.getElementById('relatorioArea').classList.remove('hidden');
+    carregarRelatorio();
+  }
+
+  async function carregarRelatorio() {
+    const hoje = new Date().toISOString().slice(0, 10);
+    const { data: pedidos, error } = await supabase.from('pedidos').select('*').eq('data', hoje);
+
+    if (error) {
+      document.getElementById('relatorioArea').innerHTML = '<p style="color:#c0392b;">Erro: ' + error.message + '</p>';
+      return;
+    }
+
+    const porSetor = {};
+    const porRefeicao = { Cafe: [], Almoco: [], Lanche: [] };
+
+    (pedidos || []).forEach(p => {
+      if (!porSetor[p.setor]) porSetor[p.setor] = { Cafe: 0, Almoco: 0, Lanche: 0 };
+      (p.refeicoes || []).forEach(r => {
+        if (porSetor[p.setor][r] !== undefined) porSetor[p.setor][r]++;
+        if (porRefeicao[r]) porRefeicao[r].push({ nome: p.nome, setor: p.setor });
+      });
+    });
+
+    let html = '<p><b>Data:</b> ' + new Date().toLocaleDateString('pt-BR') + ' — <b>Total de pedidos:</b> ' + (pedidos || []).length + '</p>';
+    html += '<table><tr><th>Setor</th><th>Café</th><th>Almoço</th><th>Lanche</th><th>Total</th></tr>';
+
+    let tc = 0, ta = 0, tl = 0;
+    Object.keys(porSetor).sort((a, b) => a.localeCompare(b, 'pt-BR')).forEach(s => {
+      const r = porSetor[s];
+      const total = r.Cafe + r.Almoco + r.Lanche;
+      tc += r.Cafe; ta += r.Almoco; tl += r.Lanche;
+      html += '<tr><td>' + s + '</td><td>' + r.Cafe + '</td><td>' + r.Almoco + '</td><td>' + r.Lanche + '</td><td><b>' + total + '</b></td></tr>';
+    });
+    html += '<tr style="font-weight:bold;background:#eef2f8;"><td>TOTAL GERAL</td><td>' + tc + '</td><td>' + ta + '</td><td>' + tl + '</td><td>' + (tc + ta + tl) + '</td></tr>';
+    html += '</table>';
+
+    const labels = { Cafe: 'Café', Almoco: 'Almoço', Lanche: 'Lanche' };
+    ['Cafe', 'Almoco', 'Lanche'].forEach(r => {
+      html += '<h3>' + labels[r] + ' (' + porRefeicao[r].length + ')</h3>';
+      if (porRefeicao[r].length === 0) {
+        html += '<p><i>Nenhum pedido</i></p>';
+      } else {
+        html += '<ul>';
+        porRefeicao[r]
+          .sort((a, b) => a.setor.localeCompare(b.setor, 'pt-BR') || a.nome.localeCompare(b.nome, 'pt-BR'))
+          .forEach(p => { html += '<li>' + p.nome + ' — ' + p.setor + '</li>'; });
+        html += '</ul>';
+      }
+    });
+
+    html += '<button onclick="carregarRelatorio()">Atualizar agora</button>';
+    document.getElementById('relatorioArea').innerHTML = html;
+  }
+</script>
+</body>
+</html>

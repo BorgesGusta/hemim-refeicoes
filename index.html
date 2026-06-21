@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pedido de Refeição - HEMIM</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+  body { margin: 0; padding: 16px; background: #f4f6f8; color: #1a1a1a; }
+  .card { background: #fff; border-radius: 12px; padding: 20px; max-width: 420px; margin: 24px auto; box-shadow: 0 1px 6px rgba(0,0,0,0.10); }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  .sub { color: #666; font-size: 13px; margin-bottom: 18px; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 14px 0 4px; }
+  input { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; font-size: 16px; }
+  button { width: 100%; padding: 13px; border: none; border-radius: 8px; background: #1F4E78; color: #fff; font-size: 15px; font-weight: 600; margin-top: 18px; cursor: pointer; }
+  button:disabled { background: #aaa; }
+  .erro { color: #c0392b; font-size: 13px; margin-top: 10px; }
+  .ok { color: #1a7f37; font-size: 14px; margin-top: 10px; font-weight: 600; }
+  .info { color: #444; font-size: 14px; margin-top: 10px; line-height: 1.5; }
+  .refeicao { display: flex; align-items: center; gap: 10px; padding: 13px; border: 1px solid #e0e0e0; border-radius: 8px; margin-top: 8px; }
+  .refeicao input { width: auto; }
+  .refeicao span.nome { font-size: 15px; flex: 1; }
+  .hidden { display: none; }
+  .voltar { text-align: center; background: none; color: #1F4E78; font-weight: 500; margin-top: 14px; text-decoration: underline; cursor: pointer; }
+  .relogio { font-size: 32px; text-align: center; margin: 10px 0; }
+</style>
+</head>
+<body>
+
+  <div class="card hidden" id="foraHorarioCard">
+    <h1>Pedido de Refeição</h1>
+    <div class="sub">Hospital Materno Infantil do Pará</div>
+    <div class="relogio">⏰</div>
+    <div class="info" id="foraHorarioMsg" style="text-align:center;"></div>
+  </div>
+
+  <div class="card hidden" id="loginCard">
+    <h1>Pedido de Refeição</h1>
+    <div class="sub" id="janelaInfo">Hospital Materno Infantil do Pará</div>
+    <label for="nome">Seu nome completo</label>
+    <input id="nome" placeholder="Digite seu nome completo">
+    <button id="btnEntrar" onclick="entrar()">Continuar</button>
+    <div class="erro" id="erroLogin"></div>
+  </div>
+
+  <div class="card hidden" id="statusCard">
+    <h1 id="saudacao"></h1>
+    <div class="sub" id="setorInfo"></div>
+    <div class="info" id="jaPediuMsg"></div>
+    <div class="voltar" onclick="sair()">Voltar</div>
+  </div>
+
+  <div class="card hidden" id="pedidoCard">
+    <h1 id="saudacao2"></h1>
+    <div class="sub" id="setorInfo2"></div>
+    <div id="refeicoes"></div>
+    <button id="btnConfirmar" onclick="confirmar()">Confirmar pedido</button>
+    <div class="erro" id="erroPedido"></div>
+    <div class="ok" id="okPedido"></div>
+  </div>
+
+<script>
+  // ===== PREENCHA AQUI COM OS DADOS DO SEU PROJETO SUPABASE =====
+  const SUPABASE_URL = 'https://ymghyblozlpmcbirgvvf.supabase.co/rest/v1/';
+  const SUPABASE_ANON_KEY = 'sb_publishable_h_cLHj3b_hzu8jOA0Lj-Gw_Dt7YTgWw';
+  // ================================================================
+
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  const REFEICOES = [{ id: 'Cafe', label: 'Café' }, { id: 'Almoco', label: 'Almoço' }, { id: 'Lanche', label: 'Lanche' }];
+  let estado = {};
+
+  function normalizar(texto) {
+    return String(texto || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+  }
+
+  function hojeStr() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  async function init() {
+    const { data: configRows, error } = await supabase.from('config').select('*');
+    if (error) {
+      document.body.innerHTML = '<div class="card"><h1>Erro ao carregar</h1><div class="erro">' + error.message + '</div></div>';
+      return;
+    }
+    const config = {};
+    (configRows || []).forEach(r => { config[r.chave] = r.valor; });
+
+    const abertura = config['horario_abertura'] || '06:00';
+    const fechamento = config['horario_fechamento'] || '09:00';
+    const agora = new Date();
+    const minAgora = agora.getHours() * 60 + agora.getMinutes();
+    const [ah, am] = abertura.split(':').map(Number);
+    const [fh, fm] = fechamento.split(':').map(Number);
+    const dentro = minAgora >= (ah * 60 + am) && minAgora < (fh * 60 + fm);
+
+    if (!dentro) {
+      document.getElementById('foraHorarioMsg').textContent =
+        'Os pedidos só podem ser feitos das ' + abertura + ' às ' + fechamento + '. Volte dentro desse horário.';
+      document.getElementById('foraHorarioCard').classList.remove('hidden');
+      return;
+    }
+
+    document.getElementById('janelaInfo').textContent =
+      'Hospital Materno Infantil do Pará — pedidos das ' + abertura + ' às ' + fechamento;
+    document.getElementById('loginCard').classList.remove('hidden');
+  }
+
+  async function entrar() {
+    const nomeInput = document.getElementById('nome').value.trim();
+    document.getElementById('erroLogin').textContent = '';
+    if (!nomeInput) {
+      document.getElementById('erroLogin').textContent = 'Digite seu nome completo.';
+      return;
+    }
+
+    document.getElementById('btnEntrar').disabled = true;
+    const { data: matches, error } = await supabase.rpc('buscar_funcionario', { nome_input: nomeInput });
+    document.getElementById('btnEntrar').disabled = false;
+
+    if (error) {
+      document.getElementById('erroLogin').textContent = 'Erro: ' + error.message;
+      return;
+    }
+    if (!matches || matches.length === 0) {
+      document.getElementById('erroLogin').textContent = 'Nome não encontrado na lista de funcionários. Confira a grafia do nome completo.';
+      return;
+    }
+
+    const f = matches[0];
+    estado.nome = f.nome;
+    estado.setor = f.setor;
+    estado.nomeNormalizado = normalizar(f.nome);
+
+    const { data: pedidoExistente } = await supabase
+      .from('pedidos')
+      .select('refeicoes')
+      .eq('nome_normalizado', estado.nomeNormalizado)
+      .eq('data', hojeStr())
+      .maybeSingle();
+
+    document.getElementById('loginCard').classList.add('hidden');
+
+    if (pedidoExistente) {
+      document.getElementById('saudacao').textContent = 'Olá, ' + f.nome.split(' ')[0] + '!';
+      document.getElementById('setorInfo').textContent = f.setor;
+      document.getElementById('jaPediuMsg').textContent =
+        'Você já registrou seu pedido de hoje: ' + pedidoExistente.refeicoes.join(', ') + '. Só é permitido um pedido por dia.';
+      document.getElementById('statusCard').classList.remove('hidden');
+    } else {
+      document.getElementById('saudacao2').textContent = 'Olá, ' + f.nome.split(' ')[0] + '!';
+      document.getElementById('setorInfo2').textContent = f.setor + ' — escolha as refeições de hoje';
+      renderRefeicoes();
+      document.getElementById('pedidoCard').classList.remove('hidden');
+    }
+  }
+
+  function renderRefeicoes() {
+    const container = document.getElementById('refeicoes');
+    container.innerHTML = '';
+    REFEICOES.forEach(r => {
+      const div = document.createElement('div');
+      div.className = 'refeicao';
+      div.innerHTML = '<input type="checkbox" value="' + r.id + '"><span class="nome">' + r.label + '</span>';
+      container.appendChild(div);
+    });
+  }
+
+  async function confirmar() {
+    const checks = document.querySelectorAll('#refeicoes input[type=checkbox]:checked');
+    const ids = Array.from(checks).map(c => c.value);
+    document.getElementById('erroPedido').textContent = '';
+    document.getElementById('okPedido').textContent = '';
+
+    if (ids.length === 0) {
+      document.getElementById('erroPedido').textContent = 'Selecione ao menos uma refeição.';
+      return;
+    }
+
+    document.getElementById('btnConfirmar').disabled = true;
+    const { error } = await supabase.from('pedidos').insert({
+      nome: estado.nome,
+      nome_normalizado: estado.nomeNormalizado,
+      setor: estado.setor,
+      refeicoes: ids
+    });
+    document.getElementById('btnConfirmar').disabled = false;
+
+    if (error) {
+      if (error.code === '23505') {
+        document.getElementById('erroPedido').textContent = 'Você já registrou seu pedido hoje.';
+      } else if (String(error.message).includes('FORA_DO_HORARIO')) {
+        document.getElementById('erroPedido').textContent = 'Fora do horário de pedidos.';
+      } else if (String(error.message).includes('LIMITE_ATINGIDO')) {
+        document.getElementById('erroPedido').textContent = 'Limite do dia já atingido para uma das refeições selecionadas.';
+      } else {
+        document.getElementById('erroPedido').textContent = 'Erro: ' + error.message;
+      }
+      return;
+    }
+
+    document.getElementById('okPedido').textContent = 'Pedido registrado com sucesso!';
+    document.getElementById('btnConfirmar').classList.add('hidden');
+    document.querySelectorAll('#refeicoes input[type=checkbox]').forEach(c => { c.disabled = true; });
+  }
+
+  function sair() {
+    location.reload();
+  }
+
+  init();
+</script>
+</body>
+</html>
