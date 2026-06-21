@@ -30,7 +30,7 @@
 
   <div class="card hidden" id="foraHorarioCard">
     <h1>Pedido de Refeição</h1>
-    <div class="sub">Hospital Materno Infantil do Pará</div>
+    <div class="sub">Hospital Materno Infantil de Marabá</div>
     <div class="relogio">⏰</div>
     <div class="info" id="foraHorarioMsg" style="text-align:center;"></div>
   </div>
@@ -62,11 +62,16 @@
 
 <script>
   // ===== PREENCHA AQUI COM OS DADOS DO SEU PROJETO SUPABASE =====
-  const SUPABASE_URL = 'https://ymghyblozlpmcbirgvvf.supabase.co/rest/v1/';
+  // IMPORTANTE: a URL deve ser só o endereço base, SEM "/rest/v1/" no final.
+  // Exemplo correto: https://ymghyblozlpmcbirgvvf.supabase.co
+  const SUPABASE_URL = 'https://ymghyblozlpmcbirgvvf.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_h_cLHj3b_hzu8jOA0Lj-Gw_Dt7YTgWw';
   // ================================================================
 
-  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // Usamos "supabaseClient" (e não "supabase") porque a biblioteca já
+  // cria uma variável global chamada "supabase" sozinha - usar o mesmo
+  // nome causa erro de "identificador já declarado".
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   const REFEICOES = [{ id: 'Cafe', label: 'Café' }, { id: 'Almoco', label: 'Almoço' }, { id: 'Lanche', label: 'Lanche' }];
   let estado = {};
 
@@ -79,7 +84,7 @@
   }
 
   async function init() {
-    const { data: configRows, error } = await supabase.from('config').select('*');
+    const { data: configRows, error } = await supabaseClient.from('config').select('*');
     if (error) {
       document.body.innerHTML = '<div class="card"><h1>Erro ao carregar</h1><div class="erro">' + error.message + '</div></div>';
       return;
@@ -116,7 +121,7 @@
     }
 
     document.getElementById('btnEntrar').disabled = true;
-    const { data: matches, error } = await supabase.rpc('buscar_funcionario', { nome_input: nomeInput });
+    const { data: matches, error } = await supabaseClient.rpc('buscar_funcionario', { nome_input: nomeInput });
     document.getElementById('btnEntrar').disabled = false;
 
     if (error) {
@@ -133,7 +138,7 @@
     estado.setor = f.setor;
     estado.nomeNormalizado = normalizar(f.nome);
 
-    const { data: pedidoExistente } = await supabase
+    const { data: pedidoExistente } = await supabaseClient
       .from('pedidos')
       .select('refeicoes')
       .eq('nome_normalizado', estado.nomeNormalizado)
@@ -179,7 +184,7 @@
     }
 
     document.getElementById('btnConfirmar').disabled = true;
-    const { error } = await supabase.from('pedidos').insert({
+    const { error } = await supabaseClient.from('pedidos').insert({
       nome: estado.nome,
       nome_normalizado: estado.nomeNormalizado,
       setor: estado.setor,

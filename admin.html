@@ -33,12 +33,15 @@
 
 <script>
   // ===== PREENCHA AQUI COM OS DADOS DO SEU PROJETO SUPABASE =====
-  const SUPABASE_URL = 'https://ymghyblozlpmcbirgvvf.supabase.co/rest/v1/';
+  // IMPORTANTE: a URL deve ser só o endereço base, SEM "/rest/v1/" no final.
+  const SUPABASE_URL = 'https://ymghyblozlpmcbirgvvf.supabase.co';
   const SUPABASE_ANON_KEY = 'sb_publishable_h_cLHj3b_hzu8jOA0Lj-Gw_Dt7YTgWw';
-  const SENHA_ADMIN = 'TROQUE_ESSA_SENHA'; // trava simples, não é segurança forte - é só pra não ficar 100% aberto
+  const SENHA_ADMIN = '123mab@'; // trava simples, não é segurança forte
   // ================================================================
 
-  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // "supabaseClient" (não "supabase") para não colidir com a variável
+  // global que a própria biblioteca já cria.
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   function entrarAdmin() {
     if (document.getElementById('senha').value !== SENHA_ADMIN) {
@@ -52,7 +55,7 @@
 
   async function carregarRelatorio() {
     const hoje = new Date().toISOString().slice(0, 10);
-    const { data: pedidos, error } = await supabase.from('pedidos').select('*').eq('data', hoje);
+    const { data: pedidos, error } = await supabaseClient.from('pedidos').select('*').eq('data', hoje);
 
     if (error) {
       document.getElementById('relatorioArea').innerHTML = '<p style="color:#c0392b;">Erro: ' + error.message + '</p>';
