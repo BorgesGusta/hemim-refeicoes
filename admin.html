@@ -39,6 +39,7 @@
   .btn-olho svg { width: 18px; height: 18px; }
   .opcao-btn { flex: 1; min-width: 160px; padding: 22px 16px; font-size: 16px; }
   .opcao-secundaria { background: #1a7f37; }
+  .opcao-terciaria { background: #b8860b; }
   .voltar-link { display: inline-block; margin-bottom: 14px; color: #1F4E78; font-size: 13px; text-decoration: underline; cursor: pointer; }
   .filtro-data { margin-bottom: 16px; }
   .filtro-data .rotulo { font-size: 12px; font-weight: 600; color: #555; margin-bottom: 6px; }
@@ -59,6 +60,9 @@
   .tag-duplicado { color: #b8860b; font-weight: 600; }
   .tag-invalido { color: #c0392b; font-weight: 600; }
   hr { border: none; border-top: 1px solid #e5e5e5; margin: 24px 0; }
+  .lista-checagem { list-style: none; padding-left: 0; }
+  .lista-checagem li { padding: 4px 0; border-bottom: 1px solid #f0f0f0; }
+  .caixa-check { display: inline-block; width: 18px; margin-right: 6px; }
   .comprovante-tabela { width: 100%; font-size: 14px; border-collapse: collapse; }
   .comprovante-tabela td { padding: 6px 0; border-bottom: 1px solid #eee; vertical-align: top; }
   .comprovante-tabela td:first-child { color: #666; width: 35%; }
@@ -82,6 +86,7 @@
       <div class="opcoes">
         <button class="opcao-btn" onclick="escolherAcao('relatorio')">Ver relatório de pedidos</button>
         <button class="opcao-btn opcao-secundaria" onclick="escolherAcao('cadastro')">Cadastrar funcionários</button>
+        <button class="opcao-btn opcao-terciaria" onclick="escolherAcao('aproveitamento')">Relatório de aproveitamento</button>
       </div>
     </div>
 
@@ -118,6 +123,7 @@
         </div>
         <button class="btn-imprimir" onclick="window.print()">Imprimir / Salvar PDF</button>
       </div>
+      <input id="buscaRelatorio" placeholder="Buscar por nome..." oninput="filtrarRelatorio()" class="no-print">
       <div id="relatorioArea"></div>
     </div>
 
@@ -141,6 +147,28 @@
       <p class="ajuda">O arquivo precisa ter as colunas <b>Nome</b>, <b>Cargo</b> e <b>Setor</b>. Nomes que já existem na lista são identificados e ignorados automaticamente.</p>
       <input type="file" id="arquivoLote" accept=".csv,.xlsx,.xls" onchange="lerArquivo(event)">
       <div id="previaLote" class="hidden"></div>
+    </div>
+
+    <!-- Etapa 3c: aproveitamento -->
+    <div id="painelAproveitamento" class="hidden">
+      <span class="voltar-link" onclick="voltarInicio()">← Voltar</span>
+      <div class="filtro-data">
+        <div class="rotulo">Período:</div>
+        <div class="atalhos">
+          <button id="btnAprovHoje" onclick="irParaAprov(0)">Hoje</button>
+          <button id="btnAprov7d" onclick="irParaAprov(7)">Últimos 7 dias</button>
+          <button id="btnAprovMes" onclick="irParaAprovMes()">Este mês</button>
+        </div>
+        <div class="rotulo">Ou escolha um período específico:</div>
+        <div class="data-especifica">
+          <input type="date" id="dataAprovInicio" onchange="limparAtalhoAprov(); carregarAproveitamento()">
+          <span style="padding:0 4px;white-space:nowrap;">até</span>
+          <input type="date" id="dataAprovFim" onchange="limparAtalhoAprov(); carregarAproveitamento()">
+        </div>
+        <button class="btn-imprimir" onclick="window.print()">Imprimir / Salvar PDF</button>
+      </div>
+      <input id="buscaAprov" placeholder="Buscar por nome no detalhamento..." oninput="renderDetalheAprov()" class="no-print">
+      <div id="aproveitamentoArea"></div>
     </div>
   </div>
 
@@ -179,8 +207,12 @@
   function escolherAcao(acao) {
     acaoEscolhida = acao;
     document.getElementById('telaInicial').classList.add('hidden');
-    document.getElementById('rotuloSenha').textContent =
-      acao === 'relatorio' ? 'Digite a senha para ver o relatório:' : 'Digite a senha para cadastrar funcionários:';
+    const rotulos = {
+      relatorio: 'Digite a senha para ver o relatório:',
+      cadastro: 'Digite a senha para cadastrar funcionários:',
+      aproveitamento: 'Digite a senha para ver o aproveitamento:'
+    };
+    document.getElementById('rotuloSenha').textContent = rotulos[acao];
     document.getElementById('senha').value = '';
     document.getElementById('senha').type = 'password';
     document.getElementById('svgOlho').innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
@@ -193,6 +225,7 @@
     senhaValidada = null;
     document.getElementById('painelRelatorio').classList.add('hidden');
     document.getElementById('painelCadastro').classList.add('hidden');
+    document.getElementById('painelAproveitamento').classList.add('hidden');
     document.getElementById('telaSenha').classList.add('hidden');
     document.getElementById('telaInicial').classList.remove('hidden');
   }
@@ -212,6 +245,17 @@
       document.getElementById('telaSenha').classList.add('hidden');
       document.getElementById('painelRelatorio').classList.remove('hidden');
       irPara(0);
+    } else if (acaoEscolhida === 'aproveitamento') {
+      const hoje = new Date().toISOString().slice(0, 10);
+      const { error } = await supabaseClient.rpc('obter_pedidos_periodo', { senha_input: senha, data_inicio: hoje, data_fim: hoje });
+      if (error) {
+        document.getElementById('msgSenha').textContent = 'Senha incorreta.';
+        return;
+      }
+      senhaValidada = senha;
+      document.getElementById('telaSenha').classList.add('hidden');
+      document.getElementById('painelAproveitamento').classList.remove('hidden');
+      irParaAprov(0);
     } else {
       const { error } = await supabaseClient.rpc('validar_senha_admin', { senha_input: senha });
       if (error) {
@@ -283,16 +327,180 @@
       if (porRefeicao[r].length === 0) {
         html += '<p><i>Nenhum pedido</i></p>';
       } else {
-        html += '<ul>';
+        html += '<ul class="lista-checagem">';
         porRefeicao[r]
-          .sort((a, b) => a.setor.localeCompare(b.setor, 'pt-BR') || a.nome.localeCompare(b.nome, 'pt-BR'))
-          .forEach(p => { html += '<li>' + p.nome + ' — ' + p.setor + '</li>'; });
+          .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+          .forEach(p => {
+            html += '<li data-nome="' + normalizar(p.nome) + '"><span class="caixa-check">☐</span>' + p.nome + ' — ' + p.setor + '</li>';
+          });
         html += '</ul>';
       }
     });
 
     html += '<button class="no-print" onclick="carregarRelatorio()">Atualizar agora</button>';
     document.getElementById('relatorioArea').innerHTML = html;
+    filtrarRelatorio();
+  }
+
+  function filtrarRelatorio() {
+    const termo = normalizar(document.getElementById('buscaRelatorio').value);
+    document.querySelectorAll('#relatorioArea li[data-nome]').forEach(li => {
+      li.style.display = (!termo || li.dataset.nome.indexOf(termo) !== -1) ? '' : 'none';
+    });
+  }
+
+  // ---------------- Relatório de aproveitamento ----------------
+  document.getElementById('dataAprovInicio').max = new Date().toISOString().slice(0, 10);
+  document.getElementById('dataAprovFim').max = new Date().toISOString().slice(0, 10);
+
+  function limparAtalhoAprov() {
+    document.getElementById('btnAprovHoje').classList.remove('ativo');
+    document.getElementById('btnAprov7d').classList.remove('ativo');
+    document.getElementById('btnAprovMes').classList.remove('ativo');
+  }
+
+  function irParaAprov(diasAtras) {
+    const fim = new Date();
+    const inicio = new Date();
+    inicio.setDate(inicio.getDate() - diasAtras);
+    document.getElementById('dataAprovInicio').value = inicio.toISOString().slice(0, 10);
+    document.getElementById('dataAprovFim').value = fim.toISOString().slice(0, 10);
+    limparAtalhoAprov();
+    if (diasAtras === 0) document.getElementById('btnAprovHoje').classList.add('ativo');
+    if (diasAtras === 7) document.getElementById('btnAprov7d').classList.add('ativo');
+    carregarAproveitamento();
+  }
+
+  function irParaAprovMes() {
+    const hoje = new Date();
+    const inicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    document.getElementById('dataAprovInicio').value = inicio.toISOString().slice(0, 10);
+    document.getElementById('dataAprovFim').value = hoje.toISOString().slice(0, 10);
+    limparAtalhoAprov();
+    document.getElementById('btnAprovMes').classList.add('ativo');
+    carregarAproveitamento();
+  }
+
+  function calcPct(parte, total) {
+    return total ? ((parte / total) * 100).toFixed(1) : '0.0';
+  }
+
+  let naoRetiradosAtuais = [];
+
+  async function carregarAproveitamento() {
+    const inicio = document.getElementById('dataAprovInicio').value;
+    const fim = document.getElementById('dataAprovFim').value;
+    if (!inicio || !fim) return;
+
+    document.getElementById('aproveitamentoArea').innerHTML = '<p class="ajuda">Carregando...</p>';
+
+    const { data, error } = await supabaseClient.rpc('obter_pedidos_periodo', {
+      senha_input: senhaValidada,
+      data_inicio: inicio,
+      data_fim: fim
+    });
+
+    if (error) {
+      document.getElementById('aproveitamentoArea').innerHTML = '<p class="msg-erro">Erro: ' + error.message + '</p>';
+      return;
+    }
+
+    renderAproveitamento(data || [], inicio, fim);
+  }
+
+  function renderAproveitamento(linhas, inicio, fim) {
+    let totalSolicitado = 0, totalRetirado = 0;
+    const porRefeicao = { Cafe: { sol: 0, ret: 0 }, Almoco: { sol: 0, ret: 0 }, Lanche: { sol: 0, ret: 0 } };
+    const porSetor = {};
+    const naoRetirados = [];
+
+    linhas.forEach(p => {
+      (p.refeicoes || []).forEach(r => {
+        totalSolicitado++;
+        if (porRefeicao[r]) porRefeicao[r].sol++;
+        if (!porSetor[p.setor]) porSetor[p.setor] = { sol: 0, ret: 0 };
+        porSetor[p.setor].sol++;
+
+        const foiRetirado = (p.entregues || []).indexOf(r) !== -1;
+        if (foiRetirado) {
+          totalRetirado++;
+          if (porRefeicao[r]) porRefeicao[r].ret++;
+          porSetor[p.setor].ret++;
+        } else {
+          naoRetirados.push({ data: p.data, nome: p.nome, setor: p.setor, refeicao: r });
+        }
+      });
+    });
+
+    const totalNaoRetirado = totalSolicitado - totalRetirado;
+    const periodoTexto = inicio === fim
+      ? new Date(inicio + 'T00:00:00').toLocaleDateString('pt-BR')
+      : new Date(inicio + 'T00:00:00').toLocaleDateString('pt-BR') + ' até ' + new Date(fim + 'T00:00:00').toLocaleDateString('pt-BR');
+
+    let html = '<div class="resumo-lote">';
+    html += '<b>Período:</b> ' + periodoTexto + '<br>';
+    html += '<b>Total solicitado:</b> ' + totalSolicitado + ' refeições<br>';
+    html += '<b>Total retirado:</b> ' + totalRetirado + ' (' + calcPct(totalRetirado, totalSolicitado) + '%)<br>';
+    html += '<b>Total não retirado:</b> ' + totalNaoRetirado + ' (<span style="color:#c0392b;">' + calcPct(totalNaoRetirado, totalSolicitado) + '% de desperdício</span>)';
+    html += '</div>';
+    html += '<p class="ajuda">Dias anteriores ao início do uso do check-in aparecem com 100% de "não retirado", pois ainda não havia conferência na entrega — isso não significa desperdício real nesses dias.</p>';
+
+    const labels = { Cafe: 'Café', Almoco: 'Almoço', Lanche: 'Lanche' };
+    html += '<h3>Por refeição</h3>';
+    html += '<div class="tabela-wrap"><table><tr><th>Refeição</th><th>Solicitado</th><th>Retirado</th><th>Não retirado</th><th>% desperdício</th></tr>';
+    ['Cafe', 'Almoco', 'Lanche'].forEach(r => {
+      const d = porRefeicao[r];
+      const naoRet = d.sol - d.ret;
+      html += '<tr><td>' + labels[r] + '</td><td>' + d.sol + '</td><td>' + d.ret + '</td><td>' + naoRet + '</td><td>' + calcPct(naoRet, d.sol) + '%</td></tr>';
+    });
+    html += '</table></div>';
+
+    html += '<h3>Por setor (do maior para o menor desperdício)</h3>';
+    const setoresArr = Object.keys(porSetor).map(s => {
+      const d = porSetor[s];
+      const naoRet = d.sol - d.ret;
+      return { setor: s, sol: d.sol, ret: d.ret, naoRet: naoRet, pctDesp: parseFloat(calcPct(naoRet, d.sol)) };
+    });
+    setoresArr.sort((a, b) => b.pctDesp - a.pctDesp);
+
+    html += '<div class="tabela-wrap"><table><tr><th>Setor</th><th>Solicitado</th><th>Retirado</th><th>Não retirado</th><th>% desperdício</th></tr>';
+    setoresArr.forEach(s => {
+      html += '<tr><td>' + s.setor + '</td><td>' + s.sol + '</td><td>' + s.ret + '</td><td>' + s.naoRet + '</td><td>' + s.pctDesp.toFixed(1) + '%</td></tr>';
+    });
+    html += '</table></div>';
+
+    html += '<h3>Detalhamento — quem não retirou (' + naoRetirados.length + ')</h3>';
+    html += '<div id="listaDetalheAprov"></div>';
+    html += '<button class="no-print" onclick="carregarAproveitamento()">Atualizar agora</button>';
+
+    naoRetiradosAtuais = naoRetirados;
+    document.getElementById('aproveitamentoArea').innerHTML = html;
+    renderDetalheAprov();
+  }
+
+  function renderDetalheAprov() {
+    const el = document.getElementById('listaDetalheAprov');
+    if (!el) return;
+    const labels = { Cafe: 'Café', Almoco: 'Almoço', Lanche: 'Lanche' };
+    const termo = normalizar(document.getElementById('buscaAprov').value);
+
+    const filtrados = naoRetiradosAtuais
+      .filter(n => !termo || normalizar(n.nome).indexOf(termo) !== -1)
+      .slice()
+      .sort((a, b) => b.data.localeCompare(a.data) || a.nome.localeCompare(b.nome, 'pt-BR'));
+
+    if (filtrados.length === 0) {
+      el.innerHTML = '<p><i>Nenhum registro encontrado</i></p>';
+      return;
+    }
+
+    let html = '<ul class="lista-checagem">';
+    filtrados.forEach(n => {
+      const dataFmt = new Date(n.data + 'T00:00:00').toLocaleDateString('pt-BR');
+      html += '<li>' + n.nome + ' — ' + n.setor + ' — ' + labels[n.refeicao] + ' (' + dataFmt + ')</li>';
+    });
+    html += '</ul>';
+    el.innerHTML = html;
   }
 
   // ---------------- Cadastro manual ----------------
