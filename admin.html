@@ -40,6 +40,7 @@
   .opcao-btn { flex: 1; min-width: 160px; padding: 22px 16px; font-size: 16px; }
   .opcao-secundaria { background: #1a7f37; }
   .opcao-terciaria { background: #b8860b; }
+  .opcao-quaternaria { background: #6c5ce7; }
   .voltar-link { display: inline-block; margin-bottom: 14px; color: #1F4E78; font-size: 13px; text-decoration: underline; cursor: pointer; }
   .filtro-data { margin-bottom: 16px; }
   .filtro-data .rotulo { font-size: 12px; font-weight: 600; color: #555; margin-bottom: 6px; }
@@ -87,6 +88,7 @@
         <button class="opcao-btn" onclick="escolherAcao('relatorio')">Ver relatório de pedidos</button>
         <button class="opcao-btn opcao-secundaria" onclick="escolherAcao('cadastro')">Cadastrar funcionários</button>
         <button class="opcao-btn opcao-terciaria" onclick="escolherAcao('aproveitamento')">Relatório de aproveitamento</button>
+        <button class="opcao-btn opcao-quaternaria" onclick="escolherAcao('operadores')">Gerenciar acesso ao check-in</button>
       </div>
     </div>
 
@@ -170,9 +172,39 @@
       <input id="buscaAprov" placeholder="Buscar por nome no detalhamento..." oninput="renderDetalheAprov()" class="no-print">
       <div id="aproveitamentoArea"></div>
     </div>
+
+    <!-- Etapa 3d: operadores do check-in -->
+    <div id="painelOperadores" class="hidden">
+      <span class="voltar-link" onclick="voltarInicio()">← Voltar</span>
+      <h2>Cadastrar operador</h2>
+      <p class="ajuda">Quem vai operar o check-in entra com nome + código pessoal (não é senha de gestor).</p>
+      <input id="novoOperadorNome" placeholder="Nome completo">
+      <input id="novoOperadorCodigo" placeholder="Código de acesso (ex.: 4 dígitos)">
+      <button onclick="cadastrarOperador()">Adicionar operador</button>
+      <div id="msgOperador"></div>
+
+      <hr>
+
+      <h2>Operadores cadastrados</h2>
+      <div id="listaOperadores"><p class="ajuda">Carregando...</p></div>
+
+      <hr>
+
+      <h2>Histórico de check-ins (auditoria)</h2>
+      <div class="atalhos">
+        <button id="btnLogHoje" onclick="irParaLog(0)">Hoje</button>
+        <button id="btnLog7d" onclick="irParaLog(7)">Últimos 7 dias</button>
+      </div>
+      <div class="data-especifica">
+        <input type="date" id="dataLogInicio" onchange="limparAtalhoLog(); carregarLog()">
+        <span style="padding:0 4px;white-space:nowrap;">até</span>
+        <input type="date" id="dataLogFim" onchange="limparAtalhoLog(); carregarLog()">
+      </div>
+      <div id="logCheckinArea"></div>
+    </div>
   </div>
 
-  <div class="rodape">Sistema desenvolvido por Agência Grow. Ferramenta de apoio operacional, sem vínculo oficial com a administração do hospital.</div>
+  <div class="rodape">Sistema desenvolvido por Agëncia Grow. Ferramenta de apoio operacional, sem vínculo oficial com a administração do hospital.</div>
 
 <script>
   // ===== PREENCHA AQUI COM OS DADOS DO SEU PROJETO SUPABASE =====
@@ -210,7 +242,8 @@
     const rotulos = {
       relatorio: 'Digite a senha para ver o relatório:',
       cadastro: 'Digite a senha para cadastrar funcionários:',
-      aproveitamento: 'Digite a senha para ver o aproveitamento:'
+      aproveitamento: 'Digite a senha para ver o aproveitamento:',
+      operadores: 'Digite a senha para gerenciar o acesso ao check-in:'
     };
     document.getElementById('rotuloSenha').textContent = rotulos[acao];
     document.getElementById('senha').value = '';
@@ -226,6 +259,7 @@
     document.getElementById('painelRelatorio').classList.add('hidden');
     document.getElementById('painelCadastro').classList.add('hidden');
     document.getElementById('painelAproveitamento').classList.add('hidden');
+    document.getElementById('painelOperadores').classList.add('hidden');
     document.getElementById('telaSenha').classList.add('hidden');
     document.getElementById('telaInicial').classList.remove('hidden');
   }
@@ -256,6 +290,17 @@
       document.getElementById('telaSenha').classList.add('hidden');
       document.getElementById('painelAproveitamento').classList.remove('hidden');
       irParaAprov(0);
+    } else if (acaoEscolhida === 'operadores') {
+      const { error } = await supabaseClient.rpc('validar_senha_admin', { senha_input: senha });
+      if (error) {
+        document.getElementById('msgSenha').textContent = 'Senha incorreta.';
+        return;
+      }
+      senhaValidada = senha;
+      document.getElementById('telaSenha').classList.add('hidden');
+      document.getElementById('painelOperadores').classList.remove('hidden');
+      carregarOperadores();
+      irParaLog(0);
     } else {
       const { error } = await supabaseClient.rpc('validar_senha_admin', { senha_input: senha });
       if (error) {
@@ -716,6 +761,132 @@
       '<div class="resumo-lote ok"><b>' + data.inseridos + ' funcionário(s) cadastrado(s) com sucesso</b>, em ' + data.setores + ' setor(es).</div>';
     document.getElementById('arquivoLote').value = '';
     loteParaInserir = [];
+  }
+
+  // ---------------- Operadores do check-in ----------------
+  async function cadastrarOperador() {
+    const nome = document.getElementById('novoOperadorNome').value.trim();
+    const codigo = document.getElementById('novoOperadorCodigo').value.trim();
+    const msg = document.getElementById('msgOperador');
+    msg.textContent = '';
+    msg.className = '';
+
+    if (!nome || !codigo) {
+      msg.textContent = 'Preencha nome e código.';
+      msg.className = 'msg-erro';
+      return;
+    }
+
+    const { error } = await supabaseClient.rpc('cadastrar_operador_checkin', {
+      senha_input: senhaValidada,
+      nome_input: nome,
+      codigo_input: codigo
+    });
+
+    if (error) {
+      msg.textContent = 'Erro: ' + error.message;
+      msg.className = 'msg-erro';
+      return;
+    }
+
+    msg.textContent = nome + ' cadastrado(a) como operador(a) do check-in.';
+    msg.className = 'msg-ok';
+    document.getElementById('novoOperadorNome').value = '';
+    document.getElementById('novoOperadorCodigo').value = '';
+    carregarOperadores();
+  }
+
+  async function carregarOperadores() {
+    const { data, error } = await supabaseClient.rpc('listar_operadores_checkin', { senha_input: senhaValidada });
+    const el = document.getElementById('listaOperadores');
+
+    if (error) {
+      el.innerHTML = '<p class="msg-erro">Erro: ' + error.message + '</p>';
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      el.innerHTML = '<p class="ajuda">Nenhum operador cadastrado ainda.</p>';
+      return;
+    }
+
+    let html = '<div class="tabela-wrap"><table><tr><th>Nome</th><th>Status</th><th>Ação</th></tr>';
+    data.forEach(o => {
+      html += '<tr><td>' + o.nome + '</td><td>' + (o.ativo ? '<span class="tag-novo">ativo</span>' : '<span class="tag-invalido">inativo</span>') + '</td>' +
+        '<td><button onclick="alternarOperador(' + o.id + ', ' + !o.ativo + ')" style="padding:6px 10px;font-size:12px;background:' + (o.ativo ? '#c0392b' : '#1a7f37') + ';">' +
+        (o.ativo ? 'Desativar' : 'Reativar') + '</button></td></tr>';
+    });
+    html += '</table></div>';
+    el.innerHTML = html;
+  }
+
+  async function alternarOperador(id, ativoNovo) {
+    const { error } = await supabaseClient.rpc('alternar_operador_checkin', {
+      senha_input: senhaValidada,
+      operador_id: id,
+      ativo_novo: ativoNovo
+    });
+    if (error) {
+      alert('Erro: ' + error.message);
+      return;
+    }
+    carregarOperadores();
+  }
+
+  // ---------------- Log de auditoria do check-in ----------------
+  document.getElementById('dataLogInicio').max = new Date().toISOString().slice(0, 10);
+  document.getElementById('dataLogFim').max = new Date().toISOString().slice(0, 10);
+
+  function limparAtalhoLog() {
+    document.getElementById('btnLogHoje').classList.remove('ativo');
+    document.getElementById('btnLog7d').classList.remove('ativo');
+  }
+
+  function irParaLog(diasAtras) {
+    const fim = new Date();
+    const inicio = new Date();
+    inicio.setDate(inicio.getDate() - diasAtras);
+    document.getElementById('dataLogInicio').value = inicio.toISOString().slice(0, 10);
+    document.getElementById('dataLogFim').value = fim.toISOString().slice(0, 10);
+    limparAtalhoLog();
+    if (diasAtras === 0) document.getElementById('btnLogHoje').classList.add('ativo');
+    if (diasAtras === 7) document.getElementById('btnLog7d').classList.add('ativo');
+    carregarLog();
+  }
+
+  async function carregarLog() {
+    const inicio = document.getElementById('dataLogInicio').value;
+    const fim = document.getElementById('dataLogFim').value;
+    if (!inicio || !fim) return;
+
+    const el = document.getElementById('logCheckinArea');
+    el.innerHTML = '<p class="ajuda">Carregando...</p>';
+
+    const { data, error } = await supabaseClient.rpc('obter_log_checkin', {
+      senha_input: senhaValidada,
+      data_inicio: inicio,
+      data_fim: fim
+    });
+
+    if (error) {
+      el.innerHTML = '<p class="msg-erro">Erro: ' + error.message + '</p>';
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      el.innerHTML = '<p class="ajuda">Nenhuma ação registrada nesse período.</p>';
+      return;
+    }
+
+    const labels = { Cafe: 'Café', Almoco: 'Almoço', Lanche: 'Lanche' };
+    let html = '<div class="tabela-wrap"><table><tr><th>Quando</th><th>Operador</th><th>Ação</th><th>Funcionário</th><th>Setor</th><th>Refeição</th></tr>';
+    data.forEach(l => {
+      const quando = new Date(l.criado_em).toLocaleString('pt-BR');
+      const acaoTexto = l.acao === 'marcar' ? 'Marcou entrega' : 'Desfez marcação';
+      html += '<tr><td>' + quando + '</td><td>' + l.operador_nome + '</td><td>' + acaoTexto + '</td><td>' + l.nome + '</td><td>' + l.setor + '</td><td>' + (labels[l.refeicao] || l.refeicao) + '</td></tr>';
+    });
+    html += '</table></div>';
+    el.innerHTML = html;
   }
 </script>
 </body>

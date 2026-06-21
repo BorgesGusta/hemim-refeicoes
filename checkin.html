@@ -31,6 +31,8 @@
   .linha-checkin .check { font-size: 18px; }
   .linha-checkin .nome-checkin { flex: 1; font-size: 15px; }
   .linha-checkin .setor-checkin { font-size: 12px; color: #888; }
+  .operador-ativo { font-size: 12px; color: #1a7f37; margin-bottom: 10px; }
+  .sair-link { font-size: 12px; color: #1F4E78; text-decoration: underline; cursor: pointer; }
   .rodape { text-align: center; font-size: 11px; color: #999; margin: 24px auto 12px; max-width: 480px; }
   @media (max-width: 480px) {
     body { padding: 12px; }
@@ -45,22 +47,24 @@
   <div class="card">
     <h1>Check-in de Refeições</h1>
 
-    <div id="telaSenha">
-      <p class="ajuda">Digite a senha de acesso:</p>
+    <div id="telaAcesso">
+      <p class="ajuda">Digite seu nome e o código pessoal de acesso:</p>
+      <input id="nomeOperador" placeholder="Seu nome completo">
       <div class="campo-senha">
-        <input id="senha" type="password" placeholder="Senha de acesso" onkeydown="if(event.key==='Enter') confirmarSenha()">
-        <button type="button" class="btn-olho" onclick="alternarSenha()" aria-label="Mostrar senha">
+        <input id="codigoOperador" type="password" placeholder="Código de acesso" onkeydown="if(event.key==='Enter') confirmarAcesso()">
+        <button type="button" class="btn-olho" onclick="alternarCodigo()" aria-label="Mostrar código">
           <svg id="svgOlho" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
             <circle cx="12" cy="12" r="3"></circle>
           </svg>
         </button>
       </div>
-      <button onclick="confirmarSenha()">Entrar</button>
-      <div id="msgSenha" class="msg-erro"></div>
+      <button onclick="confirmarAcesso()">Entrar</button>
+      <div id="msgAcesso" class="msg-erro"></div>
     </div>
 
     <div id="painelCheckin" class="hidden">
+      <div class="operador-ativo">Conferindo como: <b id="nomeOperadorAtivo"></b> — <span class="sair-link" onclick="sair()">trocar</span></div>
       <div class="abas-refeicao">
         <button id="abaCafe" class="ativa" onclick="selecionarRefeicao('Cafe')">Café</button>
         <button id="abaAlmoco" onclick="selecionarRefeicao('Almoco')">Almoço</button>
@@ -72,7 +76,7 @@
     </div>
   </div>
 
-  <div class="rodape">Sistema desenvolvido por Growup Agência — ferramenta de apoio operacional, sem vínculo oficial com a administração do hospital.</div>
+  <div class="rodape">Sistema desenvolvido por Agëncia Grow. Ferramenta de apoio operacional, sem vínculo oficial com a administração do hospital.</div>
 
 <script>
   // ===== PREENCHA AQUI COM OS DADOS DO SEU PROJETO SUPABASE =====
@@ -82,7 +86,7 @@
 
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  let senhaValidada = null;
+  let operador = { nome: '', codigo: '' };
   let refeicaoAtual = 'Cafe';
   let listaAtual = [];
 
@@ -90,8 +94,8 @@
     return String(texto || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
   }
 
-  function alternarSenha() {
-    const campo = document.getElementById('senha');
+  function alternarCodigo() {
+    const campo = document.getElementById('codigoOperador');
     const vaiMostrar = campo.type === 'password';
     campo.type = vaiMostrar ? 'text' : 'password';
     document.getElementById('svgOlho').innerHTML = vaiMostrar
@@ -99,20 +103,36 @@
       : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
   }
 
-  async function confirmarSenha() {
-    const senha = document.getElementById('senha').value;
-    document.getElementById('msgSenha').textContent = '';
+  async function confirmarAcesso() {
+    const nome = document.getElementById('nomeOperador').value.trim();
+    const codigo = document.getElementById('codigoOperador').value.trim();
+    document.getElementById('msgAcesso').textContent = '';
 
-    const { error } = await supabaseClient.rpc('validar_senha_checkin', { senha_input: senha });
-    if (error) {
-      document.getElementById('msgSenha').textContent = 'Senha incorreta.';
+    if (!nome || !codigo) {
+      document.getElementById('msgAcesso').textContent = 'Preencha seu nome e o código de acesso.';
       return;
     }
 
-    senhaValidada = senha;
-    document.getElementById('telaSenha').classList.add('hidden');
+    const { data, error } = await supabaseClient.rpc('validar_operador_checkin', { nome_input: nome, codigo_input: codigo });
+    if (error || !data || data.length === 0) {
+      document.getElementById('msgAcesso').textContent = 'Nome ou código incorretos.';
+      return;
+    }
+
+    operador = { nome: data[0].nome, codigo: codigo };
+    document.getElementById('nomeOperadorAtivo').textContent = operador.nome;
+    document.getElementById('telaAcesso').classList.add('hidden');
     document.getElementById('painelCheckin').classList.remove('hidden');
     carregarLista();
+  }
+
+  function sair() {
+    operador = { nome: '', codigo: '' };
+    document.getElementById('nomeOperador').value = '';
+    document.getElementById('codigoOperador').value = '';
+    document.getElementById('msgAcesso').textContent = '';
+    document.getElementById('painelCheckin').classList.add('hidden');
+    document.getElementById('telaAcesso').classList.remove('hidden');
   }
 
   function selecionarRefeicao(ref) {
@@ -128,7 +148,8 @@
     document.getElementById('listaCheckin').innerHTML = '<p class="ajuda">Carregando...</p>';
 
     const { data, error } = await supabaseClient.rpc('obter_lista_checkin', {
-      senha_input: senhaValidada,
+      nome_input: operador.nome,
+      codigo_input: operador.codigo,
       data_input: hoje,
       refeicao_input: refeicaoAtual
     });
@@ -176,7 +197,8 @@
     const novoStatus = !item.entregue;
 
     const { error } = await supabaseClient.rpc('marcar_entrega', {
-      senha_input: senhaValidada,
+      nome_input: operador.nome,
+      codigo_input: operador.codigo,
       pedido_id: id,
       refeicao_input: refeicaoAtual,
       entregar: novoStatus
