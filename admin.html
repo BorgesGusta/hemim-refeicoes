@@ -32,9 +32,11 @@
     th, td { padding: 6px; }
   }
   .opcoes { display: flex; gap: 10px; flex-wrap: wrap; }
-  .campo-senha { display: flex; gap: 8px; align-items: center; }
-  .campo-senha input { margin-bottom: 0; flex: 1; }
-  .btn-olho { background: #e9eef5; color: #1F4E78; padding: 12px 16px; }
+  .campo-senha { position: relative; margin-bottom: 10px; }
+  .campo-senha input { margin-bottom: 0; padding-right: 42px; }
+  .btn-olho { position: absolute; top: 0; right: 0; height: 100%; width: 42px; background: transparent; border: none; padding: 0; display: flex; align-items: center; justify-content: center; color: #999; cursor: pointer; }
+  .btn-olho:hover { color: #1F4E78; }
+  .btn-olho svg { width: 18px; height: 18px; }
   .opcao-btn { flex: 1; min-width: 160px; padding: 22px 16px; font-size: 16px; }
   .opcao-secundaria { background: #1a7f37; }
   .voltar-link { display: inline-block; margin-bottom: 14px; color: #1F4E78; font-size: 13px; text-decoration: underline; cursor: pointer; }
@@ -57,6 +59,9 @@
   .tag-duplicado { color: #b8860b; font-weight: 600; }
   .tag-invalido { color: #c0392b; font-weight: 600; }
   hr { border: none; border-top: 1px solid #e5e5e5; margin: 24px 0; }
+  .comprovante-tabela { width: 100%; font-size: 14px; border-collapse: collapse; }
+  .comprovante-tabela td { padding: 6px 0; border-bottom: 1px solid #eee; vertical-align: top; }
+  .comprovante-tabela td:first-child { color: #666; width: 35%; }
   @media print {
     .voltar-link, .filtro-data, #telaInicial, #telaSenha, .no-print { display: none; }
     body { background: #fff; }
@@ -86,7 +91,12 @@
       <p class="ajuda" id="rotuloSenha">Digite a senha de acesso:</p>
       <div class="campo-senha">
         <input id="senha" type="password" placeholder="Senha de acesso" onkeydown="if(event.key==='Enter') confirmarSenha()">
-        <button type="button" class="btn-olho" onclick="alternarSenha()">👁️</button>
+        <button type="button" class="btn-olho" onclick="alternarSenha()" aria-label="Mostrar senha">
+          <svg id="svgOlho" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+        </button>
       </div>
       <button onclick="confirmarSenha()">Entrar</button>
       <div id="msgSenha" class="msg-erro"></div>
@@ -103,7 +113,7 @@
         </div>
         <div class="rotulo">Ou escolha outra data:</div>
         <div class="data-especifica">
-          <input type="date" id="dataFiltro" onchange="limparAtalhoAtivo(); carregarRelatorio()">
+          <input type="date" id="dataFiltro" onchange="limparAtalhoAtivo(); carregarRelatorio()" max="">
           <button onclick="carregarRelatorio()">Buscar</button>
         </div>
         <button class="btn-imprimir" onclick="window.print()">Imprimir / Salvar PDF</button>
@@ -116,11 +126,14 @@
       <span class="voltar-link" onclick="voltarInicio()">← Voltar</span>
       <h2>Cadastro manual</h2>
       <p class="ajuda">Adicione um funcionário por vez.</p>
-      <input id="novoNome" placeholder="Nome completo">
-      <input id="novoCargo" placeholder="Cargo">
-      <input id="novoSetor" placeholder="Setor">
-      <button onclick="cadastrarManual()">Adicionar funcionário</button>
-      <div id="msgCadastroManual"></div>
+      <div id="formManual">
+        <input id="novoNome" placeholder="Nome completo">
+        <input id="novoCargo" placeholder="Cargo">
+        <input id="novoSetor" placeholder="Setor">
+        <button onclick="revisarManual()">Adicionar funcionário</button>
+        <div id="msgCadastroManual"></div>
+      </div>
+      <div id="revisaoManual" class="hidden"></div>
 
       <hr>
 
@@ -131,7 +144,7 @@
     </div>
   </div>
 
-  <div class="rodape">Sistema desenvolvido por Growup Agência — ferramenta de apoio operacional, sem vínculo oficial com a administração do hospital.</div>
+  <div class="rodape">Sistema desenvolvido por Agência Grow. Ferramenta de apoio operacional, sem vínculo oficial com a administração do hospital.</div>
 
 <script>
   // ===== PREENCHA AQUI COM OS DADOS DO SEU PROJETO SUPABASE =====
@@ -148,13 +161,19 @@
   let acaoEscolhida = null;
   let senhaValidada = null;
 
+  document.getElementById('dataFiltro').max = new Date().toISOString().slice(0, 10);
+
   function normalizar(texto) {
     return String(texto || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
   }
 
   function alternarSenha() {
     const campo = document.getElementById('senha');
-    campo.type = campo.type === 'password' ? 'text' : 'password';
+    const vaiMostrar = campo.type === 'password';
+    campo.type = vaiMostrar ? 'text' : 'password';
+    document.getElementById('svgOlho').innerHTML = vaiMostrar
+      ? '<path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.34 18.34 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line>'
+      : '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
   }
 
   function escolherAcao(acao) {
@@ -164,6 +183,7 @@
       acao === 'relatorio' ? 'Digite a senha para ver o relatório:' : 'Digite a senha para cadastrar funcionários:';
     document.getElementById('senha').value = '';
     document.getElementById('senha').type = 'password';
+    document.getElementById('svgOlho').innerHTML = '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle>';
     document.getElementById('msgSenha').textContent = '';
     document.getElementById('telaSenha').classList.remove('hidden');
   }
@@ -276,7 +296,9 @@
   }
 
   // ---------------- Cadastro manual ----------------
-  async function cadastrarManual() {
+  let pendenteManual = null;
+
+  function revisarManual() {
     const nome = document.getElementById('novoNome').value.trim();
     const cargo = document.getElementById('novoCargo').value.trim();
     const setor = document.getElementById('novoSetor').value.trim();
@@ -290,12 +312,44 @@
       return;
     }
 
+    pendenteManual = { nome: nome, cargo: cargo, setor: setor };
+
+    document.getElementById('formManual').classList.add('hidden');
+    document.getElementById('revisaoManual').innerHTML =
+      '<p class="ajuda" style="margin-top:0;">Confira os dados antes de confirmar:</p>' +
+      '<table class="comprovante-tabela">' +
+      '<tr><td>Nome</td><td>' + nome + '</td></tr>' +
+      '<tr><td>Cargo</td><td>' + (cargo || '—') + '</td></tr>' +
+      '<tr><td>Setor</td><td>' + setor + '</td></tr>' +
+      '</table>' +
+      '<div style="display:flex;gap:8px;margin-top:14px;">' +
+      '<button type="button" onclick="cancelarRevisaoManual()" style="background:#e9eef5;color:#1F4E78;flex:1;">Editar</button>' +
+      '<button type="button" onclick="confirmarCadastroManual()" style="flex:1;">Confirmar cadastro</button>' +
+      '</div>';
+    document.getElementById('revisaoManual').classList.remove('hidden');
+  }
+
+  function cancelarRevisaoManual() {
+    pendenteManual = null;
+    document.getElementById('revisaoManual').classList.add('hidden');
+    document.getElementById('formManual').classList.remove('hidden');
+  }
+
+  async function confirmarCadastroManual() {
+    if (!pendenteManual) return;
+    const nome = pendenteManual.nome, cargo = pendenteManual.cargo, setor = pendenteManual.setor;
+    const msg = document.getElementById('msgCadastroManual');
+
     const { data, error } = await supabaseClient.rpc('cadastrar_funcionario', {
       senha_input: senhaValidada,
       nome_input: nome,
       cargo_input: cargo,
       setor_input: setor
     });
+
+    document.getElementById('revisaoManual').classList.add('hidden');
+    document.getElementById('formManual').classList.remove('hidden');
+    pendenteManual = null;
 
     if (error) {
       msg.textContent = 'Erro ao cadastrar: ' + error.message;
